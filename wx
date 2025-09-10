@@ -1,72 +1,607 @@
-#include"wx/wxprec.h"
-#ifndef WX_PRECOMP
-#include "wx/wx.h"
-#endif 
-class MyApp : public wxApp {
-public:
-    virtual bool OnInit();
+// main.cpp
+#include <wx/wx.h>
+#include <wx/dcbuffer.h>
+#include <vector>
+#include <memory>
+#include <cmath>
+
+// 前向声明
+class CircuitElement;
+class Gate;
+class Wire;
+class CircuitCanvas;
+
+// 元素类型枚举
+enum ElementType {
+    TYPE_INPUT,
+    TYPE_OUTPUT,
+    TYPE_AND,
+    TYPE_OR,
+    TYPE_NOT,
+    TYPE_XOR,
+    TYPE_NAND,
+    TYPE_NOR
 };
 
-class MyFrame :public wxFrame {
+// 引脚类
+class Pin {
 public:
-    MyFrame(const wxString& title);
-    void OnQuit(wxCommandEvent& event);
-    void OnAbout(wxCommandEvent& event);
-    void OnSize(wxSizeEvent& event);
-    void OnButtonOK(wxCommandEvent& event);
+    Pin(int x, int y, bool isInput) : posX(x), posY(y), input(isInput), value(false), connectedWire(nullptr) {}
+
+    int GetX() const { return posX; }
+    int GetY() const { return posY; }
+    bool IsInput() const { return input; }
+    bool GetValue() const { return value; }
+    void SetValue(bool val) { value = val; }
+    void SetConnectedWire(Wire* wire) { connectedWire = wire; }
+    Wire* GetConnectedWire() const { return connectedWire; }
+
 private:
-    DECLARE_EVENT_TABLE()
+    int posX, posY;
+    bool input;
+    bool value;
+    Wire* connectedWire;
 };
-wxIMPLEMENT_APP(MyApp);
 
+// 电路元素基类
+class CircuitElement {
+public:
+    CircuitElement(ElementType type, int x, int y) : type(type), posX(x), posY(y), selected(false) {}
+    virtual ~CircuitElement() {}
 
-bool MyApp::OnInit() {
-    MyFrame* frame = new MyFrame("我的第一个wxwidggets程序");
-    frame->SetSize(500, 500);
-    frame->Show(true);
-    return true;
-}
-BEGIN_EVENT_TABLE(MyFrame, wxFrame)
-EVT_MENU(wxID_ABOUT, MyFrame::OnAbout)
-EVT_MENU(wxID_EXIT, MyFrame::OnQuit)
-END_EVENT_TABLE()
+    ElementType GetType() const { return type; }
+    int GetX() const { return posX; }
+    int GetY() const { return posY; }
+    void SetPosition(int x, int y) { posX = x; posY = y; }
+    bool IsSelected() const { return selected; }
+    void SetSelected(bool sel) { selected = sel; }
 
-#include "wx/notebook.h"
-MyFrame::MyFrame(const wxString& title) : wxFrame(NULL, wxID_ANY, title)
-{
-    wxPanel* panel = new wxPanel(this);
+    virtual void Draw(wxDC& dc) = 0;
+    virtual void Update() = 0;
+    virtual std::vector<Pin*> GetPins() = 0;
+    virtual wxRect GetBoundingBox() const = 0;
 
-    wxStaticText* text = new wxStaticText(panel, wxID_ANY, "Hello World!", wxPoint(50, 20));
+protected:
+    ElementType type;
+    int posX, posY;
+    bool selected;
+};
+// 逻辑门基类
+class Gate : public CircuitElement {
+public:
+    Gate(ElementType type, int x, int y) : CircuitElement(type, x, y) {
+        // 根据门类型创建输入输出引脚
+        if (type == TYPE_NOT) {
+            inputs.push_back(new Pin(x - 20, y, true));
+            outputs.push_back(new Pin(x + 20, y, false));
+        }
+        else {
+            inputs.push_back(new Pin(x - 20, y - 10, true));
+            inputs.push_back(new Pin(x - 20, y + 10, true));
+            outputs.push_back(new Pin(x + 20, y, false));
+        }
+    }
 
-    wxButton* button1 = new wxButton(panel, wxID_ANY, "OK", wxPoint(50, 50), wxSize(60, 40));
+    ~Gate() {
+        for (auto pin : inputs) delete pin;
+        for (auto pin : outputs) delete pin;
+    }
 
-    wxButton* button2 = new wxButton;
-    button2->Create(panel, wxID_OK, wxT("开始"), wxPoint(200, 100));
+    virtual void Draw(wxDC& dc) override {
+        dc.SetPen(selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1));
+        dc.SetBrush(*wxWHITE_BRUSH);
 
+        switch (type) {
+        case TYPE_AND:
+            dc.DrawRectangle(posX - 15, posY - 15, 30, 30);
+            dc.DrawText("AND", posX - 12, posY - 7);
+            break;
+        case TYPE_OR:
+            dc.DrawRoundedRectangle(posX - 15, posY - 15, 30, 30, 10);
+            dc.DrawText("OR", posX - 8, posY - 7);
+            break;
+        case TYPE_NOT:
+            dc.DrawRectangle(posX - 15, posY - 15, 30, 30);
+            dc.DrawText("NOT", posX - 12, posY - 7);
+            break;
+        case TYPE_XOR:
+            dc.DrawRoundedRectangle(posX - 15, posY - 15, 30, 30, 10);
+            dc.DrawText("XOR", posX - 12, posY - 7);
+            break;
+        case TYPE_NAND:
+            dc.DrawRectangle(posX - 15, posY - 15, 30, 30);
+            dc.DrawText("NAND", posX - 15, posY - 7);
+            break;
+        case TYPE_NOR:
+            dc.DrawRoundedRectangle(posX - 15, posY - 15, 30, 30, 10);
+            dc.DrawText("NOR", posX - 12, posY - 7);
+            break;
+        default:
+            break;
+        }
 
-    wxMenu* fileMenu = new wxMenu;
-    wxMenu* helpMenu = new wxMenu;
-    helpMenu->Append(wxID_ABOUT, wxT("& About...\tF1"), wxT("Showabout dialog"));
-    fileMenu->Append(wxID_EXIT, wxT("& Exit\tAlt−X"), wxT("Quit this program"));
+        // 绘制引脚
+        dc.SetPen(*wxBLACK_PEN);
+        for (auto pin : inputs) {
+            dc.DrawCircle(pin->GetX(), pin->GetY(), 3);
+        }
+        for (auto pin : outputs) {
+            dc.DrawCircle(pin->GetX(), pin->GetY(), 3);
+        }
+    }
 
-    wxMenuBar* menuBar = new wxMenuBar();
-    menuBar->Append(fileMenu, wxT("& File"));
-    menuBar->Append(helpMenu, wxT(" & Help"));
-    SetMenuBar(menuBar);
-    CreateStatusBar(2);
-    SetStatusText(wxT("Welcome to wxWidgets!"));
+    virtual void Update() override {
+        if (inputs.empty() || outputs.empty()) return;
 
-    button1->Bind(wxEVT_BUTTON, &MyFrame::OnQuit, this);
-    button2->Bind(wxEVT_BUTTON, &MyFrame::OnQuit, this);
+        bool result = false;
+        switch (type) {
+        case TYPE_AND:
+            result = inputs[0]->GetValue() && inputs[1]->GetValue();
+            break;
+        case TYPE_OR:
+            result = inputs[0]->GetValue() || inputs[1]->GetValue();
+            break;
+        case TYPE_NOT:
+            result = !inputs[0]->GetValue();
+            break;
+        case TYPE_XOR:
+            result = inputs[0]->GetValue() != inputs[1]->GetValue();
+            break;
+        case TYPE_NAND:
+            result = !(inputs[0]->GetValue() && inputs[1]->GetValue());
+            break;
+        case TYPE_NOR:
+            result = !(inputs[0]->GetValue() || inputs[1]->GetValue());
+            break;
+        default:
+            break;
+        }
 
+        outputs[0]->SetValue(result);
+    }
 
-}
-void MyFrame::OnAbout(wxCommandEvent& event) {
-    wxString msg;
-    msg.Printf(wxT("Hello andwelcome to % s"), wxVERSION_STRING);
-    wxMessageBox(msg, wxT("About Minimal"), wxOK | wxICON_INFORMATION, this);
-}
+    virtual std::vector<Pin*> GetPins() override {
+        std::vector<Pin*> allPins;
+        allPins.insert(allPins.end(), inputs.begin(), inputs.end());
+        allPins.insert(allPins.end(), outputs.begin(), outputs.end());
+        return allPins;
+    }
 
-void MyFrame::OnQuit(wxCommandEvent& event) {
-    Close();
-}
+    virtual wxRect GetBoundingBox() const override {
+        return wxRect(posX - 15, posY - 15, 30, 30);
+    }
+
+private:
+    std::vector<Pin*> inputs;
+    std::vector<Pin*> outputs;
+};
+// 输入输出引脚类
+class InputOutput : public CircuitElement {
+public:
+    InputOutput(ElementType type, int x, int y) : CircuitElement(type, x, y), value(false) {
+        if (type == TYPE_INPUT) {
+            pins.push_back(new Pin(x + 20, y, false)); // 输出引脚
+        }
+        else {
+            pins.push_back(new Pin(x - 20, y, true)); // 输入引脚
+        }
+    }
+
+    ~InputOutput() {
+        for (auto pin : pins) delete pin;
+    }
+
+    virtual void Draw(wxDC& dc) override {
+        dc.SetPen(selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1));
+        dc.SetBrush(value ? *wxGREEN_BRUSH : *wxWHITE_BRUSH);
+
+        dc.DrawRectangle(posX - 15, posY - 15, 30, 30);
+
+        if (type == TYPE_INPUT) {
+            dc.DrawText("IN", posX - 7, posY - 7);
+        }
+        else {
+            dc.DrawText("OUT", posX - 12, posY - 7);
+        }
+
+        // 绘制引脚
+        dc.SetPen(*wxBLACK_PEN);
+        for (auto pin : pins) {
+            dc.DrawCircle(pin->GetX(), pin->GetY(), 3);
+        }
+    }
+
+    virtual void Update() override {
+        // 输入输出元件不需要更新逻辑
+    }
+
+    void SetValue(bool val) { value = val; }
+    bool GetValue() const { return value; }
+
+    virtual std::vector<Pin*> GetPins() override {
+        return pins;
+    }
+
+    virtual wxRect GetBoundingBox() const override {
+        return wxRect(posX - 15, posY - 15, 30, 30);
+    }
+
+private:
+    std::vector<Pin*> pins;
+    bool value;
+};
+
+// 导线类
+class Wire {
+public:
+    Wire(Pin* start, Pin* end) : startPin(start), endPin(end) {
+        start->SetConnectedWire(this);
+        end->SetConnectedWire(this);
+    }
+
+    void Draw(wxDC& dc) {
+        dc.SetPen(wxPen(*wxBLACK, 2));
+        dc.DrawLine(startPin->GetX(), startPin->GetY(), endPin->GetX(), endPin->GetY());
+    }
+
+    void Update() {
+        // 将起始引脚的值传递到结束引脚
+        endPin->SetValue(startPin->GetValue());
+    }
+
+    Pin* GetStartPin() const { return startPin; }
+    Pin* GetEndPin() const { return endPin; }
+
+private:
+    Pin* startPin;
+    Pin* endPin;
+};
+// 画布类
+class CircuitCanvas : public wxWindow {
+public:
+    CircuitCanvas(wxWindow* parent) : wxWindow(parent, wxID_ANY),
+        currentTool(TYPE_AND), wiringMode(false), selectedElement(nullptr),
+        startPin(nullptr), simulating(false) {
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        Bind(wxEVT_PAINT, &CircuitCanvas::OnPaint, this);
+        Bind(wxEVT_LEFT_DOWN, &CircuitCanvas::OnLeftDown, this);
+        Bind(wxEVT_LEFT_UP, &CircuitCanvas::OnLeftUp, this);
+        Bind(wxEVT_MOTION, &CircuitCanvas::OnMouseMove, this);
+        Bind(wxEVT_RIGHT_DOWN, &CircuitCanvas::OnRightDown, this);
+    }
+
+    void SetCurrentTool(ElementType tool) {
+        currentTool = tool;
+        wiringMode = false;
+    }
+
+    void StartSimulation() {
+        simulating = true;
+        // 设置所有输入为随机值进行演示
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_INPUT) {
+                InputOutput* io = dynamic_cast<InputOutput*>(element.get());
+                if (io) {
+                    io->SetValue(rand() % 2 == 0);
+                }
+            }
+        }
+        UpdateCircuit();
+        Refresh();
+    }
+
+    void StopSimulation() {
+        simulating = false;
+        Refresh();
+    }
+
+    void UpdateCircuit() {
+        // 更新所有导线
+        for (auto& wire : wires) {
+            wire->Update();
+        }
+
+        // 更新所有元件
+        for (auto& element : elements) {
+            element->Update();
+        }
+    }
+
+    void Clear() {
+        elements.clear();
+        wires.clear();
+        selectedElement = nullptr;
+        startPin = nullptr;
+        Refresh();
+    }
+
+private:
+    void OnPaint(wxPaintEvent& event) {
+        wxAutoBufferedPaintDC dc(this);
+        dc.Clear();
+
+        // 绘制网格
+        dc.SetPen(wxPen(wxColour(220, 220, 220), 1));
+        int width, height;
+        GetClientSize(&width, &height);
+
+        for (int x = 0; x < width; x += 20) {
+            dc.DrawLine(x, 0, x, height);
+        }
+        for (int y = 0; y < height; y += 20) {
+            dc.DrawLine(0, y, width, y);
+        }
+
+        // 绘制导线
+        for (auto& wire : wires) {
+            wire->Draw(dc);
+        }
+
+        // 绘制元件
+        for (auto& element : elements) {
+            element->Draw(dc);
+        }
+
+        // 如果正在布线，绘制临时线
+        if (wiringMode && startPin) {
+            dc.SetPen(wxPen(*wxBLUE, 2, wxPENSTYLE_DOT));
+            dc.DrawLine(startPin->GetX(), startPin->GetY(), lastMousePos.x, lastMousePos.y);
+        }
+    }
+
+    void OnLeftDown(wxMouseEvent& event) {
+        wxPoint pos = event.GetPosition();
+        lastMousePos = pos;
+
+        if (wiringMode) {
+            // 查找引脚
+            Pin* pin = FindPinAt(pos);
+            if (pin && pin != startPin) {
+                if (startPin->IsInput() != pin->IsInput()) {
+                    // 确保一个是输入，一个是输出
+                    if (startPin->IsInput()) {
+                        wires.push_back(std::make_unique<Wire>(pin, startPin));
+                    }
+                    else {
+                        wires.push_back(std::make_unique<Wire>(startPin, pin));
+                    }
+                    UpdateCircuit();
+                }
+            }
+            wiringMode = false;
+            startPin = nullptr;
+        }
+        else {
+            // 检查是否点击了元件
+            selectedElement = nullptr;
+            for (auto it = elements.rbegin(); it != elements.rend(); ++it) {
+                if ((*it)->GetBoundingBox().Contains(pos)) {
+                    selectedElement = it->get();
+                    (*it)->SetSelected(true);
+                    dragStartPos = pos;
+                    elementStartPos = wxPoint((*it)->GetX(), (*it)->GetY());
+                    break;
+                }
+            }
+
+            // 检查是否点击了引脚
+            Pin* pin = FindPinAt(pos);
+            if (pin) {
+                wiringMode = true;
+                startPin = pin;
+            }
+            else if (currentTool != TYPE_INPUT && currentTool != TYPE_OUTPUT) {
+                // 添加新元件
+                if (currentTool >= TYPE_AND && currentTool <= TYPE_NOR) {
+                    elements.push_back(std::make_unique<Gate>(currentTool, pos.x, pos.y));
+                }
+            }
+            else {
+                // 添加输入或输出
+                elements.push_back(std::make_unique<InputOutput>(currentTool, pos.x, pos.y));
+            }
+        }
+
+        Refresh();
+    }
+
+    void OnLeftUp(wxMouseEvent& event) {
+            if (selectedElement) {
+                selectedElement->SetSelected(false);
+                selectedElement = nullptr;
+            }
+        }
+
+        void OnMouseMove(wxMouseEvent & event) {
+            wxPoint pos = event.GetPosition();
+            lastMousePos = pos;
+
+            if (event.Dragging() && selectedElement) {
+                int dx = pos.x - dragStartPos.x;
+                int dy = pos.y - dragStartPos.y;
+                selectedElement->SetPosition(elementStartPos.x + dx, elementStartPos.y + dy);
+                Refresh();
+            }
+
+            if (wiringMode && startPin) {
+                Refresh();
+            }
+        }
+
+        void OnRightDown(wxMouseEvent & event) {
+            wxPoint pos = event.GetPosition();
+
+            // 删除元件
+            for (auto it = elements.begin(); it != elements.end(); ) {
+                if ((*it)->GetBoundingBox().Contains(pos)) {
+                    // 首先删除连接到该元件的所有导线
+                    auto pins = (*it)->GetPins();
+                    for (auto& pin : pins) {
+                        for (auto wireIt = wires.begin(); wireIt != wires.end(); ) {
+                            if ((*wireIt)->GetStartPin() == pin || (*wireIt)->GetEndPin() == pin) {
+                                wireIt = wires.erase(wireIt);
+                            }
+                            else {
+                                ++wireIt;
+                            }
+                        }
+                    }
+
+                    it = elements.erase(it);
+                    Refresh();
+                    return;
+                }
+                else {
+                    ++it;
+                }
+            }
+
+            // 删除导线
+            // 注意：实际实现需要更复杂的导线选择逻辑
+        }
+
+        Pin* FindPinAt(const wxPoint & pos) {
+            for (auto& element : elements) {
+                for (auto pin : element->GetPins()) {
+                    int dx = pin->GetX() - pos.x;
+                    int dy = pin->GetY() - pos.y;
+                    if (std::sqrt(dx * dx + dy * dy) < 5) {
+                        return pin;
+                    }
+                }
+            }
+            return nullptr;
+        }
+
+        ElementType currentTool;
+        bool wiringMode;
+        bool simulating;
+        CircuitElement* selectedElement;
+        Pin* startPin;
+        wxPoint lastMousePos;
+        wxPoint dragStartPos;
+        wxPoint elementStartPos;
+
+        std::vector<std::unique_ptr<CircuitElement>> elements;
+        std::vector<std::unique_ptr<Wire>> wires;
+    };
+    // 主窗口类
+    class MainFrame : public wxFrame {
+    public:
+        MainFrame() : wxFrame(nullptr, wxID_ANY, "Logisim-like Circuit Simulator",
+            wxDefaultPosition, wxSize(800, 600)) {
+
+            // 创建菜单栏
+            wxMenuBar* menuBar = new wxMenuBar();
+            wxMenu* fileMenu = new wxMenu();
+            fileMenu->Append(wxID_NEW, "&New");
+            fileMenu->Append(wxID_EXIT, "&Exit");
+            menuBar->Append(fileMenu, "&File");
+
+            wxMenu* simMenu = new wxMenu();
+            simMenu->Append(ID_START_SIM, "&Start Simulation");
+            simMenu->Append(ID_STOP_SIM, "&Stop Simulation");
+            menuBar->Append(simMenu, "&Simulation");
+
+            SetMenuBar(menuBar);
+
+            // 创建工具栏
+            wxToolBar* toolBar = CreateToolBar();
+            toolBar->AddTool(ID_AND, "AND", wxBitmap(16, 16));
+            toolBar->AddTool(ID_OR, "OR", wxBitmap(16, 16));
+            toolBar->AddTool(ID_NOT, "NOT", wxBitmap(16, 16));
+            toolBar->AddTool(ID_XOR, "XOR", wxBitmap(16, 16));
+            toolBar->AddTool(ID_NAND, "NAND", wxBitmap(16, 16));
+            toolBar->AddTool(ID_NOR, "NOR", wxBitmap(16, 16));
+            toolBar->AddTool(ID_INPUT, "Input", wxBitmap(16, 16));
+            toolBar->AddTool(ID_OUTPUT, "Output", wxBitmap(16, 16));
+            toolBar->AddTool(ID_WIRE, "Wire", wxBitmap(16, 16));
+            toolBar->Realize();
+
+            // 创建画布
+            canvas = new CircuitCanvas(this);
+
+            // 绑定事件
+            Bind(wxEVT_MENU, &MainFrame::OnNew, this, wxID_NEW);
+            Bind(wxEVT_MENU, &MainFrame::OnExit, this, wxID_EXIT);
+            Bind(wxEVT_MENU, &MainFrame::OnStartSim, this, ID_START_SIM);
+            Bind(wxEVT_MENU, &MainFrame::OnStopSim, this, ID_STOP_SIM);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_AND);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_OR);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_NOT);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_XOR);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_NAND);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_NOR);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_INPUT);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_OUTPUT);
+            Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_WIRE);
+
+            CreateStatusBar();
+            GetStatusBar()->SetStatusText("Ready");
+        }
+
+    private:
+        enum {
+            ID_START_SIM = wxID_HIGHEST + 1,
+            ID_STOP_SIM,
+            ID_AND,
+            ID_OR,
+            ID_NOT,
+            ID_XOR,
+            ID_NAND,
+            ID_NOR,
+            ID_INPUT,
+            ID_OUTPUT,
+            ID_WIRE
+        };
+        CircuitCanvas* canvas;
+
+        void OnExit(wxCommandEvent& event) {
+            Close(true);
+        }
+
+        void OnNew(wxCommandEvent& event) {
+            canvas->Clear();
+        }
+
+        void OnStartSim(wxCommandEvent& event) {
+            canvas->StartSimulation();
+            GetStatusBar()->SetStatusText("Simulation running");
+        }
+
+        void OnStopSim(wxCommandEvent& event) {
+            canvas->StopSimulation();
+            GetStatusBar()->SetStatusText("Simulation stopped");
+        }
+
+        void OnTool(wxCommandEvent& event) {
+            int id = event.GetId();
+            switch (id) {
+            case ID_AND: canvas->SetCurrentTool(TYPE_AND); break;
+            case ID_OR: canvas->SetCurrentTool(TYPE_OR); break;
+            case ID_NOT: canvas->SetCurrentTool(TYPE_NOT); break;
+            case ID_XOR: canvas->SetCurrentTool(TYPE_XOR); break;
+            case ID_NAND: canvas->SetCurrentTool(TYPE_NAND); break;
+            case ID_NOR: canvas->SetCurrentTool(TYPE_NOR); break;
+            case ID_INPUT: canvas->SetCurrentTool(TYPE_INPUT); break;
+            case ID_OUTPUT: canvas->SetCurrentTool(TYPE_OUTPUT); break;
+            case ID_WIRE:
+                // 布线模式在点击引脚时自动激活
+                GetStatusBar()->SetStatusText("Click on a pin to start wiring");
+                break;
+            }
+        }
+    };
+
+    // 应用程序类
+    class MyApp : public wxApp {
+    public:
+        virtual bool OnInit() override {
+            MainFrame* frame = new MainFrame();
+            frame->Show(true);
+            return true;
+        }
+    };
+
+    wxIMPLEMENT_APP(MyApp);
+
