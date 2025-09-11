@@ -486,17 +486,67 @@ private:
         std::vector<std::unique_ptr<Wire>> wires;
     };
     // 主窗口类
-    class MainFrame : public wxFrame {
+class MainFrame : public wxFrame {
     public:
         MainFrame() : wxFrame(nullptr, wxID_ANY, "Logisim-like Circuit Simulator",
             wxDefaultPosition, wxSize(800, 600)) {
-
+            
             // 创建菜单栏
             wxMenuBar* menuBar = new wxMenuBar();
+
+            // 文件菜单
             wxMenu* fileMenu = new wxMenu();
-            fileMenu->Append(wxID_NEW, "&New");
-            fileMenu->Append(wxID_EXIT, "&Exit");
+            fileMenu->Append(wxID_NEW, "&New\tCtrl+N");
+            fileMenu->Append(wxID_OPEN, "&Open\tCtrl+O");
+            fileMenu->Append(wxID_SAVE, "&Save\tCtrl+S");
+            fileMenu->Append(wxID_SAVEAS, "Save &As...");
+            fileMenu->AppendSeparator();
+            fileMenu->Append(wxID_EXIT, "&Exit\tAlt+F4");
+
+            // 编辑菜单
+            wxMenu* editMenu = new wxMenu();
+            editMenu->Append(wxID_UNDO, "&Undo\tCtrl+Z");
+            editMenu->Append(wxID_REDO, "&Redo\tCtrl+Y");
+            editMenu->AppendSeparator();
+            editMenu->Append(wxID_CUT, "Cu&t\tCtrl+X");
+            editMenu->Append(wxID_COPY, "&Copy\tCtrl+C");
+            editMenu->Append(wxID_PASTE, "&Paste\tCtrl+V");
+            editMenu->AppendSeparator();
+            editMenu->Append(wxID_SELECTALL, "Select &All\tCtrl+A");
+
+            // 项目菜单（类似Logisim的Project菜单）
+            wxMenu* projectMenu = new wxMenu();
+            projectMenu->Append(1001, "Add Circuit");
+            projectMenu->Append(1002, "Move Circuit Up");
+            projectMenu->Append(1003, "Move Circuit Down");
+            projectMenu->Append(1004, "Set As Main Circuit");
+            projectMenu->AppendSeparator();
+            projectMenu->Append(1005, "Load Library");
+            projectMenu->Append(1006, "Unload Library");
+
+            // 模拟菜单（类似Logisim的Simulate菜单）
+            wxMenu* simulateMenu = new wxMenu();
+            simulateMenu->Append(2001, "Run\tCtrl+R");
+            simulateMenu->Append(2002, "Stop\tCtrl+E");
+            simulateMenu->Append(2003, "Reset\tCtrl+T");
+            simulateMenu->AppendSeparator();
+            simulateMenu->Append(2004, "Tick Once\tCtrl+1");
+            simulateMenu->Append(2005, "Ticks Enabled\tCtrl+2");
+            simulateMenu->Append(2006, "Tick Frequency...");
+
+            // 帮助菜单
+            wxMenu* helpMenu = new wxMenu();
+            helpMenu->Append(wxID_ABOUT, "&About");
+            helpMenu->Append(wxID_HELP, "&Help\tF1");
+
+            // 将菜单添加到菜单栏
             menuBar->Append(fileMenu, "&File");
+            menuBar->Append(editMenu, "&Edit");
+            menuBar->Append(projectMenu, "&Project");
+            menuBar->Append(simulateMenu, "&Simulate");
+            menuBar->Append(helpMenu, "&Help");
+
+
 
             wxMenu* simMenu = new wxMenu();
             simMenu->Append(ID_START_SIM, "&Start Simulation");
@@ -507,17 +557,20 @@ private:
 
             // 创建工具栏
             wxToolBar* toolBar = CreateToolBar();
-            toolBar->AddTool(ID_AND, "AND", wxBitmap(16, 16));
-            toolBar->AddTool(ID_OR, "OR", wxBitmap(16, 16));
-            toolBar->AddTool(ID_NOT, "NOT", wxBitmap(16, 16));
-            toolBar->AddTool(ID_XOR, "XOR", wxBitmap(16, 16));
-            toolBar->AddTool(ID_NAND, "NAND", wxBitmap(16, 16));
-            toolBar->AddTool(ID_NOR, "NOR", wxBitmap(16, 16));
-            toolBar->AddTool(ID_INPUT, "Input", wxBitmap(16, 16));
-            toolBar->AddTool(ID_OUTPUT, "Output", wxBitmap(16, 16));
-            toolBar->AddTool(ID_WIRE, "Wire", wxBitmap(16, 16));
+            toolBar->AddTool(ID_AND, "AND",wxBitmap(8,16),"AND Gate");
+            toolBar->AddTool(ID_OR, "OR", wxBitmap(8, 16),"OR Gate");
+            toolBar->AddSeparator();
+            toolBar->AddTool(ID_NOT, "NOT", wxBitmap(10, 16),"NOT Gate");
+            toolBar->AddTool(ID_XOR, "XOR", wxBitmap(10, 16),"XOR Gate");
+            toolBar->AddTool(ID_NAND, "NAND", wxBitmap(10, 16),"NAND Gate");
+            toolBar->AddTool(ID_NOR, "NOR", wxBitmap(10, 16),"NOR Gate");
+            toolBar->AddSeparator();
+            toolBar->AddTool(ID_INPUT, "Input", wxBitmap(16, 16),"Input");
+            toolBar->AddTool(ID_OUTPUT, "Output", wxBitmap(16, 16),"Output");
+            toolBar->AddTool(ID_WIRE, "Wire", wxBitmap(16, 16),"Wire");
             toolBar->Realize();
-
+            SetToolBar(toolBar);
+            
             // 创建画布
             canvas = new CircuitCanvas(this);
 
@@ -536,9 +589,13 @@ private:
             Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_OUTPUT);
             Bind(wxEVT_TOOL, &MainFrame::OnTool, this, ID_WIRE);
 
+
+
+
             CreateStatusBar();
             GetStatusBar()->SetStatusText("Ready");
         }
+
 
     private:
         enum {
@@ -560,9 +617,7 @@ private:
             Close(true);
         }
 
-        void OnNew(wxCommandEvent& event) {
-            canvas->Clear();
-        }
+  
 
         void OnStartSim(wxCommandEvent& event) {
             canvas->StartSimulation();
@@ -573,6 +628,7 @@ private:
             canvas->StopSimulation();
             GetStatusBar()->SetStatusText("Simulation stopped");
         }
+
 
         void OnTool(wxCommandEvent& event) {
             int id = event.GetId();
@@ -591,6 +647,33 @@ private:
                 break;
             }
         }
+      
+
+
+        void OnNew(wxCommandEvent& event)
+        {
+            wxMessageBox("New Project created!", "Info", wxOK | wxICON_INFORMATION);
+        }
+
+        void OnOpen(wxCommandEvent& event)
+        {
+            wxFileDialog openFileDialog(this, "Open Project", "", "",
+                "Logisim files (*.circ)|*.circ", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+            if (openFileDialog.ShowModal() == wxID_CANCEL)
+                return;
+
+            wxMessageBox("Project loaded: " + openFileDialog.GetPath(), "Info", wxOK | wxICON_INFORMATION);
+        }
+
+        void OnSave(wxCommandEvent& event)
+        {
+            wxFileDialog saveFileDialog(this, "Save Project", "", "",
+                "Logisim files (*.circ)|*.circ", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+            if (saveFileDialog.ShowModal() == wxID_CANCEL)
+                return;
+
+            wxMessageBox("Project saved: " + saveFileDialog.GetPath(), "Info", wxOK | wxICON_INFORMATION);
+        }
     };
 
     // 应用程序类
@@ -605,3 +688,5 @@ private:
 
     wxIMPLEMENT_APP(MyApp);
 
+
+    
