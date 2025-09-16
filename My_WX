@@ -1,3 +1,4 @@
+
 // main.cpp
 #include <wx/wx.h>
 #include <wx/dcbuffer.h>
@@ -596,9 +597,25 @@ public:
         Bind(wxEVT_MOUSEWHEEL, &CircuitCanvas::OnMouseWheel, this);
         Bind(wxEVT_KEY_DOWN, &CircuitCanvas::OnKeyDown, this);
         Bind(wxEVT_SIZE, &CircuitCanvas::OnSize, this);
-        SetFocus(); // 接收键盘事件
+        SetFocus(); // 接收键盘事件 
+        // 在 CircuitCanvas 构造函数中绑定上下文菜单事件
+        Bind(wxEVT_MENU, &CircuitCanvas::OnContextMenu, this);
     }
+   
 
+    // 添加上下文菜单事件处理方法
+    void OnContextMenu(wxCommandEvent& event) {
+        switch (event.GetId()) {
+        case wxID_DELETE:
+            DeleteSelectedElement();
+            break;
+        case wxID_PROPERTIES:
+            // 可以在这里实现显示属性面板的逻辑
+            break;
+        default:
+            break;
+        }
+    }
     void SetCurrentTool(ElementType tool) {
         currentTool = tool;
         wiringMode = (tool == TYPE_WIRE);
@@ -607,7 +624,44 @@ public:
         }
         Refresh();
     }
+    // 在 CircuitCanvas 类中添加删除方法
+    // 在 CircuitCanvas 中修改 DeleteSelectedElement 方法
+    void DeleteSelectedElement() {
+        if (selectedElement) {
+            wxMessageDialog dialog(GetParent(),
+                "Are you sure you want to delete the selected element?",
+                "Confirm Delete",
+                wxYES_NO | wxICON_QUESTION);
 
+            if (dialog.ShowModal() == wxID_YES) {
+                // 首先删除连接到该元件的所有导线
+                auto pins = selectedElement->GetPins();
+                for (auto& pin : pins) {
+                    for (auto wireIt = wires.begin(); wireIt != wires.end(); ) {
+                        if ((*wireIt)->GetStartPin() == pin || (*wireIt)->GetEndPin() == pin) {
+                            wireIt = wires.erase(wireIt);
+                        }
+                        else {
+                            ++wireIt;
+                        }
+                    }
+                }
+
+                // 删除元件
+                auto it = std::find_if(elements.begin(), elements.end(),
+                    [this](const std::unique_ptr<CircuitElement>& elem) {
+                        return elem.get() == selectedElement;
+                    });
+
+                if (it != elements.end()) {
+                    elements.erase(it);
+                }
+
+                selectedElement = nullptr;
+                Refresh();
+            }
+        }
+    }
     void StartSimulation() {
         simulating = true;
         // 设置所有输入为随机值进行演示
@@ -734,35 +788,7 @@ public:
         Refresh();
     }
 
-    void DeleteSelected() {
-        if (selectedElement) {
-            // 首先删除连接到该元件的所有导线
-            auto pins = selectedElement->GetPins();
-            for (auto& pin : pins) {
-                for (auto wireIt = wires.begin(); wireIt != wires.end(); ) {
-                    if ((*wireIt)->GetStartPin() == pin || (*wireIt)->GetEndPin() == pin) {
-                        wireIt = wires.erase(wireIt);
-                    }
-                    else {
-                        ++wireIt;
-                    }
-                }
-            }
 
-            // 删除元件
-            auto it = std::find_if(elements.begin(), elements.end(),
-                [this](const std::unique_ptr<CircuitElement>& elem) {
-                    return elem.get() == selectedElement;
-                });
-
-            if (it != elements.end()) {
-                elements.erase(it);
-            }
-
-            selectedElement = nullptr;
-            Refresh();
-        }
-    }
 
     void DeleteAll() {
         if (wxMessageBox("Are you sure you want to delete all elements?", "Confirm Delete All",
@@ -997,35 +1023,53 @@ private:
             Refresh();
         }
     }
-
+    // 在 CircuitCanvas 类中添加上下文菜单
     void OnRightDown(wxMouseEvent& event) {
         wxPoint pos = event.GetPosition();
         pos.x /= zoomLevel;
         pos.y /= zoomLevel;
 
         // 选择元件
+        CircuitElement* clickedElement = nullptr;
         for (auto& element : elements) {
             if (element->GetBoundingBox().Contains(pos)) {
-                selectedElement = element.get();
-                element->SetSelected(true);
-                Refresh();
-                return;
+                clickedElement = element.get();
+                break;
             }
         }
 
-        // 选择导线
-        for (auto& wire : wires) {
-            if (wire->ContainsPoint(pos)) {
-                // 在实际应用中可以实现导线选择
-                return;
+        if (clickedElement) {
+            // 选中点击的元件
+            if (selectedElement) {
+                selectedElement->SetSelected(false);
             }
-        }
+            selectedElement = clickedElement;
+            selectedElement->SetSelected(true);
 
-        // 如果没有选中任何东西，取消当前选择
-        if (selectedElement) {
-            selectedElement->SetSelected(false);
-            selectedElement = nullptr;
+            // 创建上下文菜单
+            wxMenu contextMenu;
+            contextMenu.Append(wxID_DELETE, "Delete Element");
+            contextMenu.Append(wxID_PROPERTIES, "Properties");
+
+            // 显示上下文菜单
+            PopupMenu(&contextMenu, event.GetPosition());
             Refresh();
+        }
+        else {
+            // 选择导线或取消选择
+            for (auto& wire : wires) {
+                if (wire->ContainsPoint(pos)) {
+                    // 在实际应用中可以实现导线选择
+                    return;
+                }
+            }
+
+            // 如果没有选中任何东西，取消当前选择
+            if (selectedElement) {
+                selectedElement->SetSelected(false);
+                selectedElement = nullptr;
+                Refresh();
+            }
         }
     }
 
@@ -1041,7 +1085,7 @@ private:
     void OnKeyDown(wxKeyEvent& event) {
         switch (event.GetKeyCode()) {
         case WXK_DELETE:
-            DeleteSelected();
+            DeleteSelectedElement();  // 修改为调用新的删除方法
             break;
         case WXK_ESCAPE:
             if (wiringMode && startPin) {
@@ -1285,6 +1329,8 @@ public:
         AddTool(ID_TRUTH_TABLE, "Truth Table", wxArtProvider::GetBitmap(wxART_LIST_VIEW), "Show Truth Table");
         AddTool(ID_DELETE_ALL, "Delete All", wxArtProvider::GetBitmap(wxART_DELETE), "Delete All Elements");
 
+        // 在 MainToolbar 构造函数中添加删除按钮
+        AddTool(wxID_DELETE, "Delete", wxArtProvider::GetBitmap(wxART_DELETE), "Delete Selected Element");
         Realize();
 
         // 设置默认工具
@@ -1575,7 +1621,11 @@ private:
                 "Ctrl+0 - Reset zoom",
                 "Help", wxOK | wxICON_INFORMATION, this);
             break;
-
+            // 在 OnMenuEvent 方法中添加
+        case wxID_DELETE:
+            canvas->DeleteSelectedElement();
+            GetStatusBar()->SetStatusText("Selected element deleted");
+            break;
         default:
             event.Skip();
             break;
