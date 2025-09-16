@@ -1,0 +1,1709 @@
+////Only MainFrame
+////只有主窗口
+//#include <wx/wx.h>
+//
+//class LogisimApp : public wxApp
+//{
+//public:
+//    virtual bool OnInit();
+//};
+//
+//class LogisimFrame : public wxFrame
+//{
+//public:
+//    LogisimFrame(const wxString& title);
+//
+//private:
+//    void OnExit(wxCommandEvent& event);
+//    void OnClose(wxCloseEvent& event);
+//
+//    wxDECLARE_EVENT_TABLE();
+//};
+//
+//// 事件表
+//wxBEGIN_EVENT_TABLE(LogisimFrame, wxFrame)
+//EVT_CLOSE(LogisimFrame::OnClose)
+//wxEND_EVENT_TABLE()
+//
+//// 实现应用程序类
+//wxIMPLEMENT_APP(LogisimApp);
+//
+//bool LogisimApp::OnInit()
+//{
+//    LogisimFrame* frame = new LogisimFrame("Logisim: main of Untitled");
+//    frame->Show(true);
+//    return true;
+//}
+//
+//// 实现框架窗口类
+//LogisimFrame::LogisimFrame(const wxString& title)
+//    : wxFrame(NULL, wxID_ANY, title)
+//{
+//    // 设置窗口大小和位置
+//    SetSize(1200, 800);
+//    Center();
+//
+//    // 设置窗口最小大小
+//    SetMinSize(wxSize(800, 600));
+//
+//    // 设置状态栏
+//    CreateStatusBar(1);
+//    SetStatusText("Ready");
+//}
+//
+//void LogisimFrame::OnExit(wxCommandEvent& event)
+//{
+//    Close(true);
+//}
+//
+//void LogisimFrame::OnClose(wxCloseEvent& event)
+//{
+//    Destroy();
+//}
+
+
+//Add Menu
+//添加菜单后的版本
+//#include <wx/wx.h>
+//
+// //定义菜单项ID
+//enum
+//{
+//    ID_NEW = wxID_HIGHEST + 1,
+//    ID_OPEN,
+//    ID_SAVE,
+//    ID_SAVE_AS,
+//    ID_EXPORT_IMAGE,
+//    ID_PRINT,
+//    ID_PREFERENCES,
+//    ID_QUIT,
+//
+//    ID_UNDO,
+//    ID_REDO,
+//    ID_CUT,
+//    ID_COPY,
+//    ID_PASTE,
+//    ID_DELETE,
+//    ID_SELECT_ALL,
+//
+//    ID_ADD_GATE,
+//    ID_ADD_INPUT,
+//    ID_ADD_OUTPUT,
+//    ID_ADD_WIRE,
+//
+//    ID_START_SIMULATION,
+//    ID_STOP_SIMULATION,
+//    ID_STEP,
+//    ID_RESET,
+//    ID_TICK_FREQUENCY,
+//
+//    ID_ZOOM_IN,
+//    ID_ZOOM_OUT,
+//    ID_ZOOM_FIT,
+//    ID_GRID_SHOW,
+//
+//    ID_ABOUT
+//};
+//
+//class LogisimApp : public wxApp
+//{
+//public:
+//    virtual bool OnInit();
+//};
+//
+//class LogisimFrame : public wxFrame
+//{
+//public:
+//    LogisimFrame(const wxString& title);
+//
+//private:
+//    void CreateMenuBar();
+//
+////     菜单事件处理函数
+//    void OnNew(wxCommandEvent& event);
+//    void OnOpen(wxCommandEvent& event);
+//    void OnSave(wxCommandEvent& event);
+//    void OnSaveAs(wxCommandEvent& event);
+//    void OnExportImage(wxCommandEvent& event);
+//    void OnPrint(wxCommandEvent& event);
+//    void OnPreferences(wxCommandEvent& event);
+//    void OnExit(wxCommandEvent& event);
+//
+//    void OnUndo(wxCommandEvent& event);
+//    void OnRedo(wxCommandEvent& event);
+//    void OnCut(wxCommandEvent& event);
+//    void OnCopy(wxCommandEvent& event);
+//    void OnPaste(wxCommandEvent& event);
+//    void OnDelete(wxCommandEvent& event);
+//    void OnSelectAll(wxCommandEvent& event);
+//
+//    void OnAddGate(wxCommandEvent& event);
+//    void OnAddInput(wxCommandEvent& event);
+//    void OnAddOutput(wxCommandEvent& event);
+//    void OnAddWire(wxCommandEvent& event);
+//
+//    void OnStartSimulation(wxCommandEvent& event);
+//    void OnStopSimulation(wxCommandEvent& event);
+//    void OnStep(wxCommandEvent& event);
+//    void OnReset(wxCommandEvent& event);
+//    void OnTickFrequency(wxCommandEvent& event);
+//
+//    void OnZoomIn(wxCommandEvent& event);
+//    void OnZoomOut(wxCommandEvent& event);
+//    void OnZoomFit(wxCommandEvent& event);
+//    void OnGridShow(wxCommandEvent& event);
+//
+//    void OnAbout(wxCommandEvent& event);
+//    void OnClose(wxCloseEvent& event);
+//
+//    wxDECLARE_EVENT_TABLE();
+//};
+//
+////// 事件表
+//wxBEGIN_EVENT_TABLE(LogisimFrame, wxFrame)
+//// File菜单
+//EVT_MENU(ID_NEW, LogisimFrame::OnNew)
+//EVT_MENU(ID_OPEN, LogisimFrame::OnOpen)
+//EVT_MENU(ID_SAVE, LogisimFrame::OnSave)
+//EVT_MENU(ID_SAVE_AS, LogisimFrame::OnSaveAs)
+//EVT_MENU(ID_EXPORT_IMAGE, LogisimFrame::OnExportImage)
+//EVT_MENU(ID_PRINT, LogisimFrame::OnPrint)
+//EVT_MENU(ID_PREFERENCES, LogisimFrame::OnPreferences)
+//EVT_MENU(ID_QUIT, LogisimFrame::OnExit)
+//
+//// Edit菜单
+//EVT_MENU(ID_UNDO, LogisimFrame::OnUndo)
+//EVT_MENU(ID_REDO, LogisimFrame::OnRedo)
+//EVT_MENU(ID_CUT, LogisimFrame::OnCut)
+//EVT_MENU(ID_COPY, LogisimFrame::OnCopy)
+//EVT_MENU(ID_PASTE, LogisimFrame::OnPaste)
+//EVT_MENU(ID_DELETE, LogisimFrame::OnDelete)
+//EVT_MENU(ID_SELECT_ALL, LogisimFrame::OnSelectAll)
+//
+//// Project菜单
+//EVT_MENU(ID_ADD_GATE, LogisimFrame::OnAddGate)
+//EVT_MENU(ID_ADD_INPUT, LogisimFrame::OnAddInput)
+//EVT_MENU(ID_ADD_OUTPUT, LogisimFrame::OnAddOutput)
+//EVT_MENU(ID_ADD_WIRE, LogisimFrame::OnAddWire)
+//
+//// Simulate菜单
+//EVT_MENU(ID_START_SIMULATION, LogisimFrame::OnStartSimulation)
+//EVT_MENU(ID_STOP_SIMULATION, LogisimFrame::OnStopSimulation)
+//EVT_MENU(ID_STEP, LogisimFrame::OnStep)
+//EVT_MENU(ID_RESET, LogisimFrame::OnReset)
+//EVT_MENU(ID_TICK_FREQUENCY, LogisimFrame::OnTickFrequency)
+//
+//// Window菜单
+//EVT_MENU(ID_ZOOM_IN, LogisimFrame::OnZoomIn)
+//EVT_MENU(ID_ZOOM_OUT, LogisimFrame::OnZoomOut)
+//EVT_MENU(ID_ZOOM_FIT, LogisimFrame::OnZoomFit)
+//EVT_MENU(ID_GRID_SHOW, LogisimFrame::OnGridShow)
+//
+//// Help菜单
+//EVT_MENU(ID_ABOUT, LogisimFrame::OnAbout)
+//
+//EVT_CLOSE(LogisimFrame::OnClose)
+//wxEND_EVENT_TABLE()
+//
+//// 实现应用程序类
+//wxIMPLEMENT_APP(LogisimApp);
+//
+//bool LogisimApp::OnInit()
+//{
+//    LogisimFrame* frame = new LogisimFrame("Logisim: main of Untitled");
+//    frame->Show(true);
+//    return true;
+//}
+//
+//// 实现框架窗口类
+//LogisimFrame::LogisimFrame(const wxString& title)
+//    : wxFrame(NULL, wxID_ANY, title)
+//{
+////     设置窗口大小和位置
+//    SetSize(1200, 800);
+//    Center();
+//
+////     设置窗口最小大小
+//    SetMinSize(wxSize(800, 600));
+////
+////     创建菜单栏
+//    CreateMenuBar();
+////
+////     设置状态栏
+//    CreateStatusBar(1);
+//    SetStatusText("Ready");
+//}
+//
+//void LogisimFrame::CreateMenuBar()
+//{
+//    wxMenuBar* menuBar = new wxMenuBar;
+//
+//    // File菜单
+//    wxMenu* fileMenu = new wxMenu;
+//    fileMenu->Append(ID_NEW, "&New\tCtrl+N", "Create a new circuit");
+//    fileMenu->Append(ID_OPEN, "&Open...\tCtrl+O", "Open an existing circuit");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_SAVE, "&Save\tCtrl+S", "Save the current circuit");
+//    fileMenu->Append(ID_SAVE_AS, "Save &As...\tCtrl+Shift+S", "Save the circuit with a new name");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_EXPORT_IMAGE, "Export &Image...", "Export circuit as image");
+//    fileMenu->Append(ID_PRINT, "&Print...\tCtrl+P", "Print the circuit");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_PREFERENCES, "P&references...", "Configure application preferences");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_QUIT, "E&xit\tAlt+F4", "Quit this program");
+//
+//    // Edit菜单
+//    wxMenu* editMenu = new wxMenu;
+//    editMenu->Append(ID_UNDO, "&Undo\tCtrl+Z", "Undo the last action");
+//    editMenu->Append(ID_REDO, "&Redo\tCtrl+Y", "Redo the last undone action");
+//    editMenu->AppendSeparator();
+//    editMenu->Append(ID_CUT, "Cu&t\tCtrl+X", "Cut the selection");
+//    editMenu->Append(ID_COPY, "&Copy\tCtrl+C", "Copy the selection");
+//    editMenu->Append(ID_PASTE, "&Paste\tCtrl+V", "Paste from clipboard");
+//    editMenu->Append(ID_DELETE, "&Delete\tDel", "Delete the selection");
+//    editMenu->AppendSeparator();
+//    editMenu->Append(ID_SELECT_ALL, "Select &All\tCtrl+A", "Select all components");
+//
+//    // Project菜单
+//    wxMenu* projectMenu = new wxMenu;
+//    wxMenu* addMenu = new wxMenu;
+//    addMenu->Append(ID_ADD_GATE, "&Gate", "Add a logic gate");
+//    addMenu->Append(ID_ADD_INPUT, "&Input", "Add an input pin");
+//    addMenu->Append(ID_ADD_OUTPUT, "&Output", "Add an output pin");
+//    addMenu->Append(ID_ADD_WIRE, "&Wire", "Add a wire connection");
+//    projectMenu->AppendSubMenu(addMenu, "&Add Circuit", "Add circuit components");
+//
+//    // Simulate菜单
+//    wxMenu* simulateMenu = new wxMenu;
+//    simulateMenu->Append(ID_START_SIMULATION, "&Start\tCtrl+K", "Start simulation");
+//    simulateMenu->Append(ID_STOP_SIMULATION, "S&top\tCtrl+T", "Stop simulation");
+//    simulateMenu->AppendSeparator();
+//    simulateMenu->Append(ID_STEP, "Step\tCtrl+I", "Single step simulation");
+//    simulateMenu->Append(ID_RESET, "&Reset\tCtrl+R", "Reset simulation");
+//    simulateMenu->AppendSeparator();
+//    simulateMenu->Append(ID_TICK_FREQUENCY, "Tick &Frequency...", "Set simulation frequency");
+//
+//    // Window菜单
+//    wxMenu* windowMenu = new wxMenu;
+//    wxMenu* zoomMenu = new wxMenu;
+//    zoomMenu->Append(ID_ZOOM_IN, "Zoom &In\tCtrl++", "Zoom in");
+//    zoomMenu->Append(ID_ZOOM_OUT, "Zoom &Out\tCtrl+-", "Zoom out");
+//    zoomMenu->Append(ID_ZOOM_FIT, "Zoom to &Fit\tCtrl+0", "Fit circuit to window");
+//    windowMenu->AppendSubMenu(zoomMenu, "&Zoom", "Zoom controls");
+//    windowMenu->AppendSeparator();
+//    windowMenu->AppendCheckItem(ID_GRID_SHOW, "Show &Grid", "Toggle grid display");
+//
+//    // Help菜单
+//    wxMenu* helpMenu = new wxMenu;
+//    helpMenu->Append(ID_ABOUT, "&About...\tF1", "Show about dialog");
+//
+//    // 添加菜单到菜单栏
+//    menuBar->Append(fileMenu, "&File");
+//    menuBar->Append(editMenu, "&Edit");
+//    menuBar->Append(projectMenu, "&Project");
+//    menuBar->Append(simulateMenu, "&Simulate");
+//    menuBar->Append(windowMenu, "&Window");
+//    menuBar->Append(helpMenu, "&Help");
+//
+//    SetMenuBar(menuBar);
+//}
+//
+//// 菜单事件处理函数实现
+//void LogisimFrame::OnNew(wxCommandEvent& event)
+//{
+//    SetStatusText("New circuit created");
+//}
+//
+//void LogisimFrame::OnOpen(wxCommandEvent& event)
+//{
+//    wxFileDialog openFileDialog(this, "Open circuit file", "", "", "Logisim files (*.circ)|*.circ", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+//
+//    if (openFileDialog.ShowModal() == wxID_CANCEL)
+//        return;
+//
+//    SetStatusText("Opened: " + openFileDialog.GetFilename());
+//}
+//
+//void LogisimFrame::OnSave(wxCommandEvent& event)
+//{
+//    SetStatusText("Circuit saved");
+//}
+//
+//void LogisimFrame::OnSaveAs(wxCommandEvent& event)
+//{
+//    wxFileDialog saveFileDialog(this, "Save circuit file", "", "","Logisim files (*.circ)|*.circ", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+//
+//    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+//        return;
+//
+//    SetStatusText("Saved as: " + saveFileDialog.GetFilename());
+//}
+//
+//void LogisimFrame::OnExportImage(wxCommandEvent& event)
+//{
+//    SetStatusText("Export image functionality");
+//}
+//
+//void LogisimFrame::OnPrint(wxCommandEvent& event)
+//{
+//    SetStatusText("Print functionality");
+//}
+//
+//void LogisimFrame::OnPreferences(wxCommandEvent& event)
+//{
+//    SetStatusText("Preferences dialog");
+//}
+//
+//void LogisimFrame::OnExit(wxCommandEvent& event)
+//{
+//    Close(true);
+//}
+//
+//void LogisimFrame::OnUndo(wxCommandEvent& event)
+//{
+//    SetStatusText("Undo action");
+//}
+//
+//void LogisimFrame::OnRedo(wxCommandEvent& event)
+//{
+//    SetStatusText("Redo action");
+//}
+//
+//void LogisimFrame::OnCut(wxCommandEvent& event)
+//{
+//    SetStatusText("Cut selection");
+//}
+//
+//void LogisimFrame::OnCopy(wxCommandEvent& event)
+//{
+//    SetStatusText("Copy selection");
+//}
+//
+//void LogisimFrame::OnPaste(wxCommandEvent& event)
+//{
+//    SetStatusText("Paste from clipboard");
+//}
+//
+//void LogisimFrame::OnDelete(wxCommandEvent& event)
+//{
+//    SetStatusText("Delete selection");
+//}
+//
+//void LogisimFrame::OnSelectAll(wxCommandEvent& event)
+//{
+//    SetStatusText("Select all");
+//}
+//
+//void LogisimFrame::OnAddGate(wxCommandEvent& event)
+//{
+//    SetStatusText("Add gate mode");
+//}
+//
+//void LogisimFrame::OnAddInput(wxCommandEvent& event)
+//{
+//    SetStatusText("Add input mode");
+//}
+//
+//void LogisimFrame::OnAddOutput(wxCommandEvent& event)
+//{
+//    SetStatusText("Add output mode");
+//}
+//
+//void LogisimFrame::OnAddWire(wxCommandEvent& event)
+//{
+//    SetStatusText("Add wire mode");
+//}
+//
+//void LogisimFrame::OnStartSimulation(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation started");
+//}
+//
+//void LogisimFrame::OnStopSimulation(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation stopped");
+//}
+//
+//void LogisimFrame::OnStep(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation step");
+//}
+//
+//void LogisimFrame::OnReset(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation reset");
+//}
+//
+//void LogisimFrame::OnTickFrequency(wxCommandEvent& event)
+//{
+//    SetStatusText("Set tick frequency");
+//}
+//
+//void LogisimFrame::OnZoomIn(wxCommandEvent& event)
+//{
+//    SetStatusText("Zoom in");
+//}
+//
+//void LogisimFrame::OnZoomOut(wxCommandEvent& event)
+//{
+//    SetStatusText("Zoom out");
+//}
+//
+//void LogisimFrame::OnZoomFit(wxCommandEvent& event)
+//{
+//    SetStatusText("Zoom to fit");
+//}
+//
+//void LogisimFrame::OnGridShow(wxCommandEvent& event)
+//{
+//    SetStatusText("Toggle grid display");
+//}
+//
+//void LogisimFrame::OnAbout(wxCommandEvent& event)
+//{
+//    wxMessageBox("Logisim Circuit Simulator\n\nBased on wxWidgets framework","About Logisim", wxOK | wxICON_INFORMATION);
+//}
+//
+//void LogisimFrame::OnClose(wxCloseEvent& event)
+//{
+//    Destroy();
+//}
+
+
+//Add ToolBar
+//添加工具栏的版本
+//#include <wx/wx.h>
+//#include <wx/artprov.h>
+//
+//// 定义菜单项ID
+//enum
+//{
+//    ID_NEW = wxID_HIGHEST + 1,
+//    ID_OPEN,
+//    ID_SAVE,
+//    ID_SAVE_AS,
+//    ID_EXPORT_IMAGE,
+//    ID_PRINT,
+//    ID_PREFERENCES,
+//    ID_QUIT,
+//
+//    ID_UNDO,
+//    ID_REDO,
+//    ID_CUT,
+//    ID_COPY,
+//    ID_PASTE,
+//    ID_DELETE,
+//    ID_SELECT_ALL,
+//
+//    ID_ADD_GATE,
+//    ID_ADD_INPUT,
+//    ID_ADD_OUTPUT,
+//    ID_ADD_WIRE,
+//
+//    ID_START_SIMULATION,
+//    ID_STOP_SIMULATION,
+//    ID_STEP,
+//    ID_RESET,
+//    ID_TICK_FREQUENCY,
+//
+//    ID_ZOOM_IN,
+//    ID_ZOOM_OUT,
+//    ID_ZOOM_FIT,
+//    ID_GRID_SHOW,
+//
+//    // 工具栏专用工具
+//    ID_TOOL_SELECT,
+//    ID_TOOL_HAND,
+//    ID_TOOL_TEXT,
+//
+//    ID_ABOUT
+//};
+//
+//class LogisimApp : public wxApp
+//{
+//public:
+//    virtual bool OnInit();
+//};
+//
+//class LogisimFrame : public wxFrame
+//{
+//public:
+//    LogisimFrame(const wxString& title);
+//
+//private:
+//    void CreateMenuBar();
+//    void CreateMainToolBar();
+//
+//    // 菜单事件处理函数
+//    void OnNew(wxCommandEvent& event);
+//    void OnOpen(wxCommandEvent& event);
+//    void OnSave(wxCommandEvent& event);
+//    void OnSaveAs(wxCommandEvent& event);
+//    void OnExportImage(wxCommandEvent& event);
+//    void OnPrint(wxCommandEvent& event);
+//    void OnPreferences(wxCommandEvent& event);
+//    void OnExit(wxCommandEvent& event);
+//
+//    void OnUndo(wxCommandEvent& event);
+//    void OnRedo(wxCommandEvent& event);
+//    void OnCut(wxCommandEvent& event);
+//    void OnCopy(wxCommandEvent& event);
+//    void OnPaste(wxCommandEvent& event);
+//    void OnDelete(wxCommandEvent& event);
+//    void OnSelectAll(wxCommandEvent& event);
+//
+//    void OnAddGate(wxCommandEvent& event);
+//    void OnAddInput(wxCommandEvent& event);
+//    void OnAddOutput(wxCommandEvent& event);
+//    void OnAddWire(wxCommandEvent& event);
+//
+//    void OnStartSimulation(wxCommandEvent& event);
+//    void OnStopSimulation(wxCommandEvent& event);
+//    void OnStep(wxCommandEvent& event);
+//    void OnReset(wxCommandEvent& event);
+//    void OnTickFrequency(wxCommandEvent& event);
+//
+//    void OnZoomIn(wxCommandEvent& event);
+//    void OnZoomOut(wxCommandEvent& event);
+//    void OnZoomFit(wxCommandEvent& event);
+//    void OnGridShow(wxCommandEvent& event);
+//
+//    // 工具栏专用工具事件
+//    void OnToolSelect(wxCommandEvent& event);
+//    void OnToolHand(wxCommandEvent& event);
+//    void OnToolText(wxCommandEvent& event);
+//
+//    void OnAbout(wxCommandEvent& event);
+//    void OnClose(wxCloseEvent& event);
+//
+//    // 创建图标的辅助函数
+//    wxBitmap CreateToolBitmap(const wxString& label, const wxColour& color = wxColour(100, 150, 200));
+//
+//    wxDECLARE_EVENT_TABLE();
+//};
+//
+//// 事件表
+//wxBEGIN_EVENT_TABLE(LogisimFrame, wxFrame)
+//// File菜单
+//EVT_MENU(ID_NEW, LogisimFrame::OnNew)
+//EVT_MENU(ID_OPEN, LogisimFrame::OnOpen)
+//EVT_MENU(ID_SAVE, LogisimFrame::OnSave)
+//EVT_MENU(ID_SAVE_AS, LogisimFrame::OnSaveAs)
+//EVT_MENU(ID_EXPORT_IMAGE, LogisimFrame::OnExportImage)
+//EVT_MENU(ID_PRINT, LogisimFrame::OnPrint)
+//EVT_MENU(ID_PREFERENCES, LogisimFrame::OnPreferences)
+//EVT_MENU(ID_QUIT, LogisimFrame::OnExit)
+//
+//// Edit菜单
+//EVT_MENU(ID_UNDO, LogisimFrame::OnUndo)
+//EVT_MENU(ID_REDO, LogisimFrame::OnRedo)
+//EVT_MENU(ID_CUT, LogisimFrame::OnCut)
+//EVT_MENU(ID_COPY, LogisimFrame::OnCopy)
+//EVT_MENU(ID_PASTE, LogisimFrame::OnPaste)
+//EVT_MENU(ID_DELETE, LogisimFrame::OnDelete)
+//EVT_MENU(ID_SELECT_ALL, LogisimFrame::OnSelectAll)
+//
+//// Project菜单
+//EVT_MENU(ID_ADD_GATE, LogisimFrame::OnAddGate)
+//EVT_MENU(ID_ADD_INPUT, LogisimFrame::OnAddInput)
+//EVT_MENU(ID_ADD_OUTPUT, LogisimFrame::OnAddOutput)
+//EVT_MENU(ID_ADD_WIRE, LogisimFrame::OnAddWire)
+//
+//// Simulate菜单
+//EVT_MENU(ID_START_SIMULATION, LogisimFrame::OnStartSimulation)
+//EVT_MENU(ID_STOP_SIMULATION, LogisimFrame::OnStopSimulation)
+//EVT_MENU(ID_STEP, LogisimFrame::OnStep)
+//EVT_MENU(ID_RESET, LogisimFrame::OnReset)
+//EVT_MENU(ID_TICK_FREQUENCY, LogisimFrame::OnTickFrequency)
+//
+//// Window菜单
+//EVT_MENU(ID_ZOOM_IN, LogisimFrame::OnZoomIn)
+//EVT_MENU(ID_ZOOM_OUT, LogisimFrame::OnZoomOut)
+//EVT_MENU(ID_ZOOM_FIT, LogisimFrame::OnZoomFit)
+//EVT_MENU(ID_GRID_SHOW, LogisimFrame::OnGridShow)
+//
+//// 工具栏工具
+//EVT_MENU(ID_TOOL_SELECT, LogisimFrame::OnToolSelect)
+//EVT_MENU(ID_TOOL_HAND, LogisimFrame::OnToolHand)
+//EVT_MENU(ID_TOOL_TEXT, LogisimFrame::OnToolText)
+//
+//// Help菜单
+//EVT_MENU(ID_ABOUT, LogisimFrame::OnAbout)
+//
+//EVT_CLOSE(LogisimFrame::OnClose)
+//wxEND_EVENT_TABLE()
+//
+//// 实现应用程序类
+//wxIMPLEMENT_APP(LogisimApp);
+//
+//bool LogisimApp::OnInit()
+//{
+//    LogisimFrame* frame = new LogisimFrame("Logisim: main of Untitled");
+//    frame->Show(true);
+//    return true;
+//}
+//
+//// 实现框架窗口类
+//LogisimFrame::LogisimFrame(const wxString& title)
+//    : wxFrame(NULL, wxID_ANY, title)
+//{
+//    // 设置窗口大小和位置
+//    SetSize(1200, 800);
+//    Center();
+//
+//    // 设置窗口最小大小
+//    SetMinSize(wxSize(800, 600));
+//
+//    // 创建菜单栏
+//    CreateMenuBar();
+//
+//    // 创建工具栏
+//    CreateMainToolBar();
+//
+//    // 设置状态栏
+//    CreateStatusBar(1);
+//    SetStatusText("Ready");
+//}
+//
+//wxBitmap LogisimFrame::CreateToolBitmap(const wxString& label, const wxColour& color)
+//{
+//    wxBitmap bitmap(24, 24);
+//    wxMemoryDC dc(bitmap);
+//
+//    // 设置背景
+//    dc.SetBackground(wxBrush(wxColour(240, 240, 240)));
+//    dc.Clear();
+//
+//    // 绘制边框
+//    dc.SetPen(wxPen(wxColour(128, 128, 128), 1));
+//    dc.SetBrush(wxBrush(color));
+//    dc.DrawRectangle(2, 2, 20, 20);
+//
+//    // 绘制文字
+//    dc.SetTextForeground(wxColour(255, 255, 255));
+//    wxFont font(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+//    dc.SetFont(font);
+//
+//    wxSize textSize = dc.GetTextExtent(label);
+//    int x = (24 - textSize.GetWidth()) / 2;
+//    int y = (24 - textSize.GetHeight()) / 2;
+//    dc.DrawText(label, x, y);
+//
+//    dc.SelectObject(wxNullBitmap);
+//    return bitmap;
+//}
+//
+//void LogisimFrame::CreateMainToolBar()
+//{
+//    wxToolBar* toolBar = CreateToolBar(wxTB_HORIZONTAL | wxTB_FLAT | wxTB_NODIVIDER);
+//    toolBar->SetToolBitmapSize(wxSize(24, 24));
+//
+//    // 文件工具
+//    toolBar->AddTool(ID_NEW, "New",
+//        wxArtProvider::GetBitmap(wxART_NEW, wxART_TOOLBAR),
+//        "Create a new circuit");
+//    toolBar->AddTool(ID_OPEN, "Open",
+//        wxArtProvider::GetBitmap(wxART_FILE_OPEN, wxART_TOOLBAR),
+//        "Open an existing circuit");
+//    toolBar->AddTool(ID_SAVE, "Save",
+//        wxArtProvider::GetBitmap(wxART_FILE_SAVE, wxART_TOOLBAR),
+//        "Save the current circuit");
+//
+//    toolBar->AddSeparator();
+//
+//    // 编辑工具
+//    toolBar->AddTool(ID_UNDO, "Undo",
+//        wxArtProvider::GetBitmap(wxART_UNDO, wxART_TOOLBAR),
+//        "Undo the last action");
+//    toolBar->AddTool(ID_REDO, "Redo",
+//        wxArtProvider::GetBitmap(wxART_REDO, wxART_TOOLBAR),
+//        "Redo the last undone action");
+//
+//    toolBar->AddSeparator();
+//
+//    toolBar->AddTool(ID_CUT, "Cut",
+//        wxArtProvider::GetBitmap(wxART_CUT, wxART_TOOLBAR),
+//        "Cut the selection");
+//    toolBar->AddTool(ID_COPY, "Copy",
+//        wxArtProvider::GetBitmap(wxART_COPY, wxART_TOOLBAR),
+//        "Copy the selection");
+//    toolBar->AddTool(ID_PASTE, "Paste",
+//        wxArtProvider::GetBitmap(wxART_PASTE, wxART_TOOLBAR),
+//        "Paste from clipboard");
+//
+//    toolBar->AddSeparator();
+//
+//    // 基本工具
+//    toolBar->AddTool(ID_TOOL_SELECT, "Select",
+//        CreateToolBitmap("S", wxColour(70, 130, 180)),
+//        "Selection tool", wxITEM_RADIO);
+//    toolBar->AddTool(ID_TOOL_HAND, "Hand",
+//        CreateToolBitmap("H", wxColour(34, 139, 34)),
+//        "Hand/Pan tool", wxITEM_RADIO);
+//    toolBar->AddTool(ID_TOOL_TEXT, "Text",
+//        CreateToolBitmap("T", wxColour(220, 20, 60)),
+//        "Text tool", wxITEM_RADIO);
+//
+//    toolBar->AddSeparator();
+//
+//    // 电路元件工具
+//    toolBar->AddTool(ID_ADD_INPUT, "Input",
+//        CreateToolBitmap("I", wxColour(255, 140, 0)),
+//        "Add input pin", wxITEM_RADIO);
+//    toolBar->AddTool(ID_ADD_OUTPUT, "Output",
+//        CreateToolBitmap("O", wxColour(255, 69, 0)),
+//        "Add output pin", wxITEM_RADIO);
+//    toolBar->AddTool(ID_ADD_GATE, "Gate",
+//        CreateToolBitmap("G", wxColour(138, 43, 226)),
+//        "Add logic gate", wxITEM_RADIO);
+//    toolBar->AddTool(ID_ADD_WIRE, "Wire",
+//        CreateToolBitmap("W", wxColour(25, 25, 112)),
+//        "Add wire", wxITEM_RADIO);
+//
+//    toolBar->AddSeparator();
+//
+//    // 仿真控制工具
+//    toolBar->AddTool(ID_START_SIMULATION, "Start",
+//        CreateToolBitmap("Play", wxColour(0, 128, 0)),
+//        "Start simulation");
+//    toolBar->AddTool(ID_STOP_SIMULATION, "Stop",
+//        CreateToolBitmap("Stop", wxColour(178, 34, 34)),
+//        "Stop simulation");
+//    toolBar->AddTool(ID_STEP, "Step",
+//        CreateToolBitmap("Step", wxColour(30, 144, 255)),
+//        "Single step simulation");
+//    toolBar->AddTool(ID_RESET, "Reset",
+//        CreateToolBitmap("Rst", wxColour(255, 165, 0)),
+//        "Reset simulation");
+//
+//    toolBar->AddSeparator();
+//
+//    // 视图工具
+//    toolBar->AddTool(ID_ZOOM_IN, "Zoom In",
+//        CreateToolBitmap("+", wxColour(0, 100, 0)),
+//        "Zoom in");
+//    toolBar->AddTool(ID_ZOOM_OUT, "Zoom Out",
+//        CreateToolBitmap("-", wxColour(139, 0, 0)),
+//        "Zoom out");
+//    toolBar->AddTool(ID_ZOOM_FIT, "Fit",
+//        CreateToolBitmap("Fit", wxColour(75, 0, 130)),
+//        "Zoom to fit");
+//
+//    // 默认选择选择工具
+//    toolBar->ToggleTool(ID_TOOL_SELECT, true);
+//
+//    toolBar->Realize();
+//}
+//
+//void LogisimFrame::CreateMenuBar()
+//{
+//    wxMenuBar* menuBar = new wxMenuBar;
+//
+//    // File菜单
+//    wxMenu* fileMenu = new wxMenu;
+//    fileMenu->Append(ID_NEW, "&New\tCtrl+N", "Create a new circuit");
+//    fileMenu->Append(ID_OPEN, "&Open...\tCtrl+O", "Open an existing circuit");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_SAVE, "&Save\tCtrl+S", "Save the current circuit");
+//    fileMenu->Append(ID_SAVE_AS, "Save &As...\tCtrl+Shift+S", "Save the circuit with a new name");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_EXPORT_IMAGE, "Export &Image...", "Export circuit as image");
+//    fileMenu->Append(ID_PRINT, "&Print...\tCtrl+P", "Print the circuit");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_PREFERENCES, "P&references...", "Configure application preferences");
+//    fileMenu->AppendSeparator();
+//    fileMenu->Append(ID_QUIT, "E&xit\tAlt+F4", "Quit this program");
+//
+//    // Edit菜单
+//    wxMenu* editMenu = new wxMenu;
+//    editMenu->Append(ID_UNDO, "&Undo\tCtrl+Z", "Undo the last action");
+//    editMenu->Append(ID_REDO, "&Redo\tCtrl+Y", "Redo the last undone action");
+//    editMenu->AppendSeparator();
+//    editMenu->Append(ID_CUT, "Cu&t\tCtrl+X", "Cut the selection");
+//    editMenu->Append(ID_COPY, "&Copy\tCtrl+C", "Copy the selection");
+//    editMenu->Append(ID_PASTE, "&Paste\tCtrl+V", "Paste from clipboard");
+//    editMenu->Append(ID_DELETE, "&Delete\tDel", "Delete the selection");
+//    editMenu->AppendSeparator();
+//    editMenu->Append(ID_SELECT_ALL, "Select &All\tCtrl+A", "Select all components");
+//
+//    // Project菜单
+//    wxMenu* projectMenu = new wxMenu;
+//    wxMenu* addMenu = new wxMenu;
+//    addMenu->Append(ID_ADD_GATE, "&Gate", "Add a logic gate");
+//    addMenu->Append(ID_ADD_INPUT, "&Input", "Add an input pin");
+//    addMenu->Append(ID_ADD_OUTPUT, "&Output", "Add an output pin");
+//    addMenu->Append(ID_ADD_WIRE, "&Wire", "Add a wire connection");
+//    projectMenu->AppendSubMenu(addMenu, "&Add Circuit", "Add circuit components");
+//
+//    // Simulate菜单
+//    wxMenu* simulateMenu = new wxMenu;
+//    simulateMenu->Append(ID_START_SIMULATION, "&Start\tCtrl+K", "Start simulation");
+//    simulateMenu->Append(ID_STOP_SIMULATION, "S&top\tCtrl+T", "Stop simulation");
+//    simulateMenu->AppendSeparator();
+//    simulateMenu->Append(ID_STEP, "Step\tCtrl+I", "Single step simulation");
+//    simulateMenu->Append(ID_RESET, "&Reset\tCtrl+R", "Reset simulation");
+//    simulateMenu->AppendSeparator();
+//    simulateMenu->Append(ID_TICK_FREQUENCY, "Tick &Frequency...", "Set simulation frequency");
+//
+//    // Window菜单
+//    wxMenu* windowMenu = new wxMenu;
+//    wxMenu* zoomMenu = new wxMenu;
+//    zoomMenu->Append(ID_ZOOM_IN, "Zoom &In\tCtrl++", "Zoom in");
+//    zoomMenu->Append(ID_ZOOM_OUT, "Zoom &Out\tCtrl+-", "Zoom out");
+//    zoomMenu->Append(ID_ZOOM_FIT, "Zoom to &Fit\tCtrl+0", "Fit circuit to window");
+//    windowMenu->AppendSubMenu(zoomMenu, "&Zoom", "Zoom controls");
+//    windowMenu->AppendSeparator();
+//    windowMenu->AppendCheckItem(ID_GRID_SHOW, "Show &Grid", "Toggle grid display");
+//
+//    // Help菜单
+//    wxMenu* helpMenu = new wxMenu;
+//    helpMenu->Append(ID_ABOUT, "&About...\tF1", "Show about dialog");
+//
+//    // 添加菜单到菜单栏
+//    menuBar->Append(fileMenu, "&File");
+//    menuBar->Append(editMenu, "&Edit");
+//    menuBar->Append(projectMenu, "&Project");
+//    menuBar->Append(simulateMenu, "&Simulate");
+//    menuBar->Append(windowMenu, "&Window");
+//    menuBar->Append(helpMenu, "&Help");
+//
+//    SetMenuBar(menuBar);
+//}
+//
+//// 菜单事件处理函数实现
+//void LogisimFrame::OnNew(wxCommandEvent& event)
+//{
+//    SetStatusText("New circuit created");
+//}
+//
+//void LogisimFrame::OnOpen(wxCommandEvent& event)
+//{
+//    wxFileDialog openFileDialog(this, "Open circuit file", "", "",
+//        "Logisim files (*.circ)|*.circ", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+//
+//    if (openFileDialog.ShowModal() == wxID_CANCEL)
+//        return;
+//
+//    SetStatusText("Opened: " + openFileDialog.GetFilename());
+//}
+//
+//void LogisimFrame::OnSave(wxCommandEvent& event)
+//{
+//    SetStatusText("Circuit saved");
+//}
+//
+//void LogisimFrame::OnSaveAs(wxCommandEvent& event)
+//{
+//    wxFileDialog saveFileDialog(this, "Save circuit file", "", "",
+//        "Logisim files (*.circ)|*.circ", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+//
+//    if (saveFileDialog.ShowModal() == wxID_CANCEL)
+//        return;
+//
+//    SetStatusText("Saved as: " + saveFileDialog.GetFilename());
+//}
+//
+//void LogisimFrame::OnExportImage(wxCommandEvent& event)
+//{
+//    SetStatusText("Export image functionality");
+//}
+//
+//void LogisimFrame::OnPrint(wxCommandEvent& event)
+//{
+//    SetStatusText("Print functionality");
+//}
+//
+//void LogisimFrame::OnPreferences(wxCommandEvent& event)
+//{
+//    SetStatusText("Preferences dialog");
+//}
+//
+//void LogisimFrame::OnExit(wxCommandEvent& event)
+//{
+//    Close(true);
+//}
+//
+//void LogisimFrame::OnUndo(wxCommandEvent& event)
+//{
+//    SetStatusText("Undo action");
+//}
+//
+//void LogisimFrame::OnRedo(wxCommandEvent& event)
+//{
+//    SetStatusText("Redo action");
+//}
+//
+//void LogisimFrame::OnCut(wxCommandEvent& event)
+//{
+//    SetStatusText("Cut selection");
+//}
+//
+//void LogisimFrame::OnCopy(wxCommandEvent& event)
+//{
+//    SetStatusText("Copy selection");
+//}
+//
+//void LogisimFrame::OnPaste(wxCommandEvent& event)
+//{
+//    SetStatusText("Paste from clipboard");
+//}
+//
+//void LogisimFrame::OnDelete(wxCommandEvent& event)
+//{
+//    SetStatusText("Delete selection");
+//}
+//
+//void LogisimFrame::OnSelectAll(wxCommandEvent& event)
+//{
+//    SetStatusText("Select all");
+//}
+//
+//void LogisimFrame::OnAddGate(wxCommandEvent& event)
+//{
+//    SetStatusText("Add gate mode");
+//    GetToolBar()->ToggleTool(ID_ADD_GATE, true);
+//}
+//
+//void LogisimFrame::OnAddInput(wxCommandEvent& event)
+//{
+//    SetStatusText("Add input mode");
+//    GetToolBar()->ToggleTool(ID_ADD_INPUT, true);
+//}
+//
+//void LogisimFrame::OnAddOutput(wxCommandEvent& event)
+//{
+//    SetStatusText("Add output mode");
+//    GetToolBar()->ToggleTool(ID_ADD_OUTPUT, true);
+//}
+//
+//void LogisimFrame::OnAddWire(wxCommandEvent& event)
+//{
+//    SetStatusText("Add wire mode");
+//    GetToolBar()->ToggleTool(ID_ADD_WIRE, true);
+//}
+//
+//void LogisimFrame::OnStartSimulation(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation started");
+//}
+//
+//void LogisimFrame::OnStopSimulation(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation stopped");
+//}
+//
+//void LogisimFrame::OnStep(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation step");
+//}
+//
+//void LogisimFrame::OnReset(wxCommandEvent& event)
+//{
+//    SetStatusText("Simulation reset");
+//}
+//
+//void LogisimFrame::OnTickFrequency(wxCommandEvent& event)
+//{
+//    SetStatusText("Set tick frequency");
+//}
+//
+//void LogisimFrame::OnZoomIn(wxCommandEvent& event)
+//{
+//    SetStatusText("Zoom in");
+//}
+//
+//void LogisimFrame::OnZoomOut(wxCommandEvent& event)
+//{
+//    SetStatusText("Zoom out");
+//}
+//
+//void LogisimFrame::OnZoomFit(wxCommandEvent& event)
+//{
+//    SetStatusText("Zoom to fit");
+//}
+//
+//void LogisimFrame::OnGridShow(wxCommandEvent& event)
+//{
+//    SetStatusText("Toggle grid display");
+//}
+//
+//// 工具栏专用工具事件
+//void LogisimFrame::OnToolSelect(wxCommandEvent& event)
+//{
+//    SetStatusText("Selection tool active");
+//}
+//
+//void LogisimFrame::OnToolHand(wxCommandEvent& event)
+//{
+//    SetStatusText("Hand/Pan tool active");
+//}
+//
+//void LogisimFrame::OnToolText(wxCommandEvent& event)
+//{
+//    SetStatusText("Text tool active");
+//}
+//
+//void LogisimFrame::OnAbout(wxCommandEvent& event)
+//{
+//    wxMessageBox("Logisim Circuit Simulator\n\nBased on wxWidgets framework",
+//        "About Logisim", wxOK | wxICON_INFORMATION);
+//}
+//
+//void LogisimFrame::OnClose(wxCloseEvent& event)
+//{
+//    Destroy();
+//}
+
+
+//Add TreeCtrl
+//添加树形控件版本
+// 树形控件事件处理
+#include <wx/wx.h>
+#include <wx/artprov.h>
+#include <wx/treectrl.h>
+#include <wx/splitter.h>
+
+// 定义菜单项ID
+enum
+{
+    ID_NEW = wxID_HIGHEST + 1,
+    ID_OPEN,
+    ID_SAVE,
+    ID_SAVE_AS,
+    ID_EXPORT_IMAGE,
+    ID_PRINT,
+    ID_PREFERENCES,
+    ID_QUIT,
+
+    ID_UNDO,
+    ID_REDO,
+    ID_CUT,
+    ID_COPY,
+    ID_PASTE,
+    ID_DELETE,
+    ID_SELECT_ALL,
+
+    ID_ADD_GATE,
+    ID_ADD_INPUT,
+    ID_ADD_OUTPUT,
+    ID_ADD_WIRE,
+
+    ID_START_SIMULATION,
+    ID_STOP_SIMULATION,
+    ID_STEP,
+    ID_RESET,
+    ID_TICK_FREQUENCY,
+
+    ID_ZOOM_IN,
+    ID_ZOOM_OUT,
+    ID_ZOOM_FIT,
+    ID_GRID_SHOW,
+
+    // 工具栏专用工具
+    ID_TOOL_SELECT,
+    ID_TOOL_HAND,
+    ID_TOOL_TEXT,
+
+    // 树形控件ID
+    ID_TREE_CTRL,
+
+    // 绘图面板ID
+    ID_CANVAS_PANEL,
+
+    ID_ABOUT
+};
+
+// 绘图面板类 - 完整的双缓冲实现
+class CircuitCanvas : public wxPanel
+{
+public:
+    CircuitCanvas(wxWindow* parent);
+
+    // 公共成员变量，允许外部访问
+    bool m_showGrid;
+    int m_gridSize;
+
+    // 公共方法
+    void InvalidateBuffer() { m_bufferValid = false; }
+
+private:
+    void OnPaint(wxPaintEvent& event);
+    void OnMouseDown(wxMouseEvent& event);
+    void OnMouseUp(wxMouseEvent& event);
+    void OnSize(wxSizeEvent& event);
+    void OnEraseBackground(wxEraseEvent& event);
+
+    // 双缓冲相关方法
+    void CreateBuffer();
+    void RedrawBuffer();
+    void DrawGrid(wxMemoryDC& dc);
+    void DrawCircuit(wxMemoryDC& dc);
+
+    // 私有成员变量
+    wxPoint m_mousePos;
+    bool m_dragging;
+
+    // 双缓冲相关
+    wxBitmap m_backBuffer;
+    bool m_bufferValid;
+
+    wxDECLARE_EVENT_TABLE();
+};
+
+class LogisimApp : public wxApp
+{
+public:
+    virtual bool OnInit();
+};
+
+class LogisimFrame : public wxFrame
+{
+public:
+    LogisimFrame(const wxString& title);
+
+private:
+    void CreateMenuBar();
+    void CreateMainToolBar();
+    void CreateLayout();
+    void CreateTreeCtrl();
+    void PopulateTreeCtrl();
+
+    // 菜单事件处理函数
+    void OnNew(wxCommandEvent& event);
+    void OnOpen(wxCommandEvent& event);
+    void OnSave(wxCommandEvent& event);
+    void OnSaveAs(wxCommandEvent& event);
+    void OnExportImage(wxCommandEvent& event);
+    void OnPrint(wxCommandEvent& event);
+    void OnPreferences(wxCommandEvent& event);
+    void OnExit(wxCommandEvent& event);
+
+    void OnUndo(wxCommandEvent& event);
+    void OnRedo(wxCommandEvent& event);
+    void OnCut(wxCommandEvent& event);
+    void OnCopy(wxCommandEvent& event);
+    void OnPaste(wxCommandEvent& event);
+    void OnDelete(wxCommandEvent& event);
+    void OnSelectAll(wxCommandEvent& event);
+
+    void OnAddGate(wxCommandEvent& event);
+    void OnAddInput(wxCommandEvent& event);
+    void OnAddOutput(wxCommandEvent& event);
+    void OnAddWire(wxCommandEvent& event);
+
+    void OnStartSimulation(wxCommandEvent& event);
+    void OnStopSimulation(wxCommandEvent& event);
+    void OnStep(wxCommandEvent& event);
+    void OnReset(wxCommandEvent& event);
+    void OnTickFrequency(wxCommandEvent& event);
+
+    void OnZoomIn(wxCommandEvent& event);
+    void OnZoomOut(wxCommandEvent& event);
+    void OnZoomFit(wxCommandEvent& event);
+    void OnGridShow(wxCommandEvent& event);
+
+    // 工具栏专用工具事件
+    void OnToolSelect(wxCommandEvent& event);
+    void OnToolHand(wxCommandEvent& event);
+    void OnToolText(wxCommandEvent& event);
+
+    // 树形控件事件
+    void OnTreeSelChanged(wxTreeEvent& event);
+    void OnTreeItemActivated(wxTreeEvent& event);
+    void OnTreeRightClick(wxTreeEvent& event);
+
+    void OnAbout(wxCommandEvent& event);
+    void OnClose(wxCloseEvent& event);
+
+    // 创建图标的辅助函数
+    wxBitmap CreateToolBitmap(const wxString& label, const wxColour& color = wxColour(100, 150, 200));
+
+    // UI组件
+    wxSplitterWindow* m_splitter;
+    wxTreeCtrl* m_treeCtrl;
+    CircuitCanvas* m_canvas;
+
+    // 树形控件节点ID
+    wxTreeItemId m_rootId;
+    wxTreeItemId m_wiringId;
+    wxTreeItemId m_gatesId;
+    wxTreeItemId m_plexersId;
+    wxTreeItemId m_arithmeticId;
+    wxTreeItemId m_memoryId;
+    wxTreeItemId m_inputOutputId;
+    wxTreeItemId m_baseId;
+
+    wxDECLARE_EVENT_TABLE();
+};
+
+// 绘图面板事件表
+wxBEGIN_EVENT_TABLE(CircuitCanvas, wxPanel)
+EVT_PAINT(CircuitCanvas::OnPaint)
+EVT_LEFT_DOWN(CircuitCanvas::OnMouseDown)
+EVT_LEFT_UP(CircuitCanvas::OnMouseUp)
+EVT_SIZE(CircuitCanvas::OnSize)
+EVT_ERASE_BACKGROUND(CircuitCanvas::OnEraseBackground)
+wxEND_EVENT_TABLE()
+
+// 主框架事件表
+wxBEGIN_EVENT_TABLE(LogisimFrame, wxFrame)
+EVT_MENU(ID_NEW, LogisimFrame::OnNew)
+EVT_MENU(ID_OPEN, LogisimFrame::OnOpen)
+EVT_MENU(ID_SAVE, LogisimFrame::OnSave)
+EVT_MENU(ID_SAVE_AS, LogisimFrame::OnSaveAs)
+EVT_MENU(ID_EXPORT_IMAGE, LogisimFrame::OnExportImage)
+EVT_MENU(ID_PRINT, LogisimFrame::OnPrint)
+EVT_MENU(ID_PREFERENCES, LogisimFrame::OnPreferences)
+EVT_MENU(ID_QUIT, LogisimFrame::OnExit)
+
+EVT_MENU(ID_UNDO, LogisimFrame::OnUndo)
+EVT_MENU(ID_REDO, LogisimFrame::OnRedo)
+EVT_MENU(ID_CUT, LogisimFrame::OnCut)
+EVT_MENU(ID_COPY, LogisimFrame::OnCopy)
+EVT_MENU(ID_PASTE, LogisimFrame::OnPaste)
+EVT_MENU(ID_DELETE, LogisimFrame::OnDelete)
+EVT_MENU(ID_SELECT_ALL, LogisimFrame::OnSelectAll)
+
+EVT_MENU(ID_ADD_GATE, LogisimFrame::OnAddGate)
+EVT_MENU(ID_ADD_INPUT, LogisimFrame::OnAddInput)
+EVT_MENU(ID_ADD_OUTPUT, LogisimFrame::OnAddOutput)
+EVT_MENU(ID_ADD_WIRE, LogisimFrame::OnAddWire)
+
+EVT_MENU(ID_START_SIMULATION, LogisimFrame::OnStartSimulation)
+EVT_MENU(ID_STOP_SIMULATION, LogisimFrame::OnStopSimulation)
+EVT_MENU(ID_STEP, LogisimFrame::OnStep)
+EVT_MENU(ID_RESET, LogisimFrame::OnReset)
+EVT_MENU(ID_TICK_FREQUENCY, LogisimFrame::OnTickFrequency)
+
+EVT_MENU(ID_ZOOM_IN, LogisimFrame::OnZoomIn)
+EVT_MENU(ID_ZOOM_OUT, LogisimFrame::OnZoomOut)
+EVT_MENU(ID_ZOOM_FIT, LogisimFrame::OnZoomFit)
+EVT_MENU(ID_GRID_SHOW, LogisimFrame::OnGridShow)
+
+EVT_MENU(ID_TOOL_SELECT, LogisimFrame::OnToolSelect)
+EVT_MENU(ID_TOOL_HAND, LogisimFrame::OnToolHand)
+EVT_MENU(ID_TOOL_TEXT, LogisimFrame::OnToolText)
+
+EVT_TREE_SEL_CHANGED(ID_TREE_CTRL, LogisimFrame::OnTreeSelChanged)
+EVT_TREE_ITEM_ACTIVATED(ID_TREE_CTRL, LogisimFrame::OnTreeItemActivated)
+EVT_TREE_ITEM_RIGHT_CLICK(ID_TREE_CTRL, LogisimFrame::OnTreeRightClick)
+
+EVT_MENU(ID_ABOUT, LogisimFrame::OnAbout)
+EVT_CLOSE(LogisimFrame::OnClose)
+wxEND_EVENT_TABLE()
+
+// 实现应用程序类
+wxIMPLEMENT_APP(LogisimApp);
+
+bool LogisimApp::OnInit()
+{
+    LogisimFrame* frame = new LogisimFrame("Logisim: main of Untitled");
+    frame->Show(true);
+    return true;
+}
+
+// 实现绘图面板类 - 完整的双缓冲系统
+CircuitCanvas::CircuitCanvas(wxWindow* parent): wxPanel(parent, ID_CANVAS_PANEL),
+    m_showGrid(true),
+    m_gridSize(20),
+    m_dragging(false),
+    m_mousePos(-1, -1),
+    m_bufferValid(false)
+{
+    SetBackgroundColour(wxColour(255, 255, 255));
+    SetBackgroundStyle(wxBG_STYLE_CUSTOM);
+}
+
+void CircuitCanvas::CreateBuffer()
+{
+    wxSize size = GetSize();
+    if (size.GetWidth() > 0 && size.GetHeight() > 0)
+    {
+        m_backBuffer = wxBitmap(size.GetWidth(), size.GetHeight());
+        m_bufferValid = false;
+    }
+}
+
+void CircuitCanvas::RedrawBuffer()
+{
+    if (!m_backBuffer.IsOk())
+        return;
+
+    // 在后台缓冲区中绘制所有内容
+    wxMemoryDC memDC(m_backBuffer);
+
+    // 清除背景
+    memDC.SetBackground(wxBrush(wxColour(255, 255, 255)));
+    memDC.Clear();
+
+    // 绘制网格
+    if (m_showGrid)
+    {
+        DrawGrid(memDC);
+    }
+
+    // 绘制电路内容
+    DrawCircuit(memDC);
+
+    m_bufferValid = true;
+}
+
+void CircuitCanvas::OnPaint(wxPaintEvent& event)
+{
+    wxPaintDC dc(this);
+
+    // 如果缓冲区无效，重新创建并绘制
+    if (!m_backBuffer.IsOk())
+    {
+        CreateBuffer();
+    }
+
+    if (!m_bufferValid)
+    {
+        RedrawBuffer();
+    }
+
+    // 将后台缓冲区的内容一次性复制到屏幕
+    if (m_backBuffer.IsOk())
+    {
+        dc.DrawBitmap(m_backBuffer, 0, 0, false);
+    }
+}
+
+void CircuitCanvas::OnEraseBackground(wxEraseEvent& event)
+{
+    // 完全不处理背景擦除 - 这是防止闪烁的关键
+}
+
+void CircuitCanvas::DrawGrid(wxMemoryDC& dc)
+{
+    wxSize size = GetSize();
+    dc.SetPen(wxPen(wxColour(230, 230, 230), 1, wxPENSTYLE_DOT));
+
+    // 绘制垂直线
+    for (int x = 0; x < size.GetWidth(); x += m_gridSize)
+    {
+        dc.DrawLine(x, 0, x, size.GetHeight());
+    }
+
+    // 绘制水平线
+    for (int y = 0; y < size.GetHeight(); y += m_gridSize)
+    {
+        dc.DrawLine(0, y, size.GetWidth(), y);
+    }
+}
+
+void CircuitCanvas::DrawCircuit(wxMemoryDC& dc)
+{
+    // 绘制示例电路元件
+    dc.SetPen(wxPen(wxColour(0, 0, 0), 2));
+    dc.SetBrush(wxBrush(wxColour(220, 220, 220)));
+
+    // 绘制一个简单的与门示例
+    wxPoint points[4] = {
+        wxPoint(100, 100),
+        wxPoint(150, 100),
+        wxPoint(150, 140),
+        wxPoint(100, 140)
+    };
+    dc.DrawPolygon(4, points);
+
+    // 绘制与门的弧形输出
+    dc.SetBrush(wxBrush(wxColour(220, 220, 220)));
+    dc.DrawEllipticArc(140, 110, 20, 20, 270, 90);
+
+    // 绘制输入输出线
+    dc.SetPen(wxPen(wxColour(0, 0, 0), 1));
+    dc.DrawLine(80, 110, 100, 110);
+    dc.DrawLine(80, 130, 100, 130);
+    dc.DrawLine(160, 120, 180, 120);
+
+    // 绘制文字标签
+    dc.SetTextForeground(wxColour(0, 0, 0));
+    dc.DrawText("AND", 110, 115);
+}
+
+void CircuitCanvas::OnMouseDown(wxMouseEvent& event)
+{
+    m_mousePos = event.GetPosition();
+    m_dragging = true;
+    CaptureMouse();
+    // 鼠标事件不触发重绘
+}
+
+void CircuitCanvas::OnMouseUp(wxMouseEvent& event)
+{
+    if (m_dragging)
+    {
+        ReleaseMouse();
+        m_dragging = false;
+    }
+    // 鼠标事件不触发重绘
+}
+
+void CircuitCanvas::OnSize(wxSizeEvent& event)
+{
+    // 窗口大小改变时重新创建缓冲区
+    CreateBuffer();
+    RedrawBuffer();
+    Refresh();
+    event.Skip();
+}
+
+// 实现主框架类
+LogisimFrame::LogisimFrame(const wxString& title): wxFrame(NULL, wxID_ANY, title), m_splitter(nullptr), m_treeCtrl(nullptr), m_canvas(nullptr)
+{
+    SetSize(1200, 800);
+    Center();
+    SetMinSize(wxSize(800, 600));
+
+    CreateMenuBar();
+    CreateMainToolBar();
+    CreateLayout();
+}
+
+wxBitmap LogisimFrame::CreateToolBitmap(const wxString& label, const wxColour& color)
+{
+    wxBitmap bitmap(24, 24);
+    wxMemoryDC dc(bitmap);
+
+    dc.SetBackground(wxBrush(wxColour(240, 240, 240)));
+    dc.Clear();
+
+    dc.SetPen(wxPen(wxColour(128, 128, 128), 1));
+    dc.SetBrush(wxBrush(color));
+    dc.DrawRectangle(2, 2, 20, 20);
+
+    dc.SetTextForeground(wxColour(255, 255, 255));
+    wxFont font(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD);
+    dc.SetFont(font);
+
+    wxSize textSize = dc.GetTextExtent(label);
+    int x = (24 - textSize.GetWidth()) / 2;
+    int y = (24 - textSize.GetHeight()) / 2;
+    dc.DrawText(label, x, y);
+
+    dc.SelectObject(wxNullBitmap);
+    return bitmap;
+}
+
+void LogisimFrame::CreateMainToolBar()
+{
+    wxToolBar* toolBar = CreateToolBar(wxTB_HORIZONTAL | wxTB_FLAT | wxTB_NODIVIDER);
+    toolBar->SetToolBitmapSize(wxSize(24, 24));
+
+    toolBar->AddTool(ID_NEW, "New", wxArtProvider::GetBitmap(wxART_NEW, wxART_TOOLBAR), "Create a new circuit");
+    toolBar->AddTool(ID_OPEN, "Open", wxArtProvider::GetBitmap(wxART_FILE_OPEN, wxART_TOOLBAR), "Open an existing circuit");
+    toolBar->AddTool(ID_SAVE, "Save", wxArtProvider::GetBitmap(wxART_FILE_SAVE, wxART_TOOLBAR), "Save the current circuit");
+
+    toolBar->AddSeparator();
+
+    toolBar->AddTool(ID_UNDO, "Undo", wxArtProvider::GetBitmap(wxART_UNDO, wxART_TOOLBAR), "Undo the last action");
+    toolBar->AddTool(ID_REDO, "Redo", wxArtProvider::GetBitmap(wxART_REDO, wxART_TOOLBAR), "Redo the last undone action");
+
+    toolBar->AddSeparator();
+
+    toolBar->AddTool(ID_TOOL_SELECT, "Select", CreateToolBitmap("S", wxColour(70, 130, 180)), "Selection tool", wxITEM_RADIO);
+    toolBar->AddTool(ID_TOOL_HAND, "Hand", CreateToolBitmap("H", wxColour(34, 139, 34)), "Hand/Pan tool", wxITEM_RADIO);
+    toolBar->AddTool(ID_ADD_GATE, "Gate", CreateToolBitmap("G", wxColour(138, 43, 226)), "Add logic gate", wxITEM_RADIO);
+
+    toolBar->ToggleTool(ID_TOOL_SELECT, true);
+    toolBar->Realize();
+}
+
+void LogisimFrame::CreateLayout()
+{
+    m_splitter = new wxSplitterWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+        wxSP_3D | wxSP_LIVE_UPDATE);
+    m_splitter->SetMinimumPaneSize(150);
+
+    CreateTreeCtrl();
+    m_canvas = new CircuitCanvas(m_splitter);
+
+    m_splitter->SplitVertically(m_treeCtrl, m_canvas, 200);
+}
+
+void LogisimFrame::CreateTreeCtrl()
+{
+    m_treeCtrl = new wxTreeCtrl(m_splitter, ID_TREE_CTRL,
+        wxDefaultPosition, wxDefaultSize,
+        wxTR_DEFAULT_STYLE | wxTR_SINGLE);
+
+    wxFont treeFont = m_treeCtrl->GetFont();
+    treeFont.SetPointSize(9);
+    m_treeCtrl->SetFont(treeFont);
+
+    PopulateTreeCtrl();
+}
+
+void LogisimFrame::PopulateTreeCtrl()
+{
+    m_rootId = m_treeCtrl->AddRoot("Untitled", -1, -1);
+    m_treeCtrl->Expand(m_rootId);
+
+    wxTreeItemId mainCircuit = m_treeCtrl->AppendItem(m_rootId, "main", -1, -1);
+    m_treeCtrl->SetItemBold(mainCircuit, true);
+
+    m_wiringId = m_treeCtrl->AppendItem(m_rootId, "Wiring", -1, -1);
+    m_treeCtrl->AppendItem(m_wiringId, "Splitter");
+    m_treeCtrl->AppendItem(m_wiringId, "Pin");
+    m_treeCtrl->AppendItem(m_wiringId, "Probe");
+    m_treeCtrl->AppendItem(m_wiringId, "Tunnel");
+    m_treeCtrl->AppendItem(m_wiringId, "Pull Resistor");
+    m_treeCtrl->AppendItem(m_wiringId, "Clock");
+    m_treeCtrl->AppendItem(m_wiringId, "Constant");
+
+    m_gatesId = m_treeCtrl->AppendItem(m_rootId, "Gates", -1, -1);
+    m_treeCtrl->AppendItem(m_gatesId, "NOT Gate");
+    m_treeCtrl->AppendItem(m_gatesId, "Buffer");
+    m_treeCtrl->AppendItem(m_gatesId, "AND Gate");
+    m_treeCtrl->AppendItem(m_gatesId, "OR Gate");
+    m_treeCtrl->AppendItem(m_gatesId, "NAND Gate");
+    m_treeCtrl->AppendItem(m_gatesId, "NOR Gate");
+    m_treeCtrl->AppendItem(m_gatesId, "XOR Gate");
+    m_treeCtrl->AppendItem(m_gatesId, "XNOR Gate");
+
+    m_plexersId = m_treeCtrl->AppendItem(m_rootId, "Plexers", -1, -1);
+    m_treeCtrl->AppendItem(m_plexersId, "Multiplexer");
+    m_treeCtrl->AppendItem(m_plexersId, "Demultiplexer");
+    m_treeCtrl->AppendItem(m_plexersId, "Decoder");
+
+    m_arithmeticId = m_treeCtrl->AppendItem(m_rootId, "Arithmetic", -1, -1);
+    m_treeCtrl->AppendItem(m_arithmeticId, "Adder");
+    m_treeCtrl->AppendItem(m_arithmeticId, "Subtractor");
+    m_treeCtrl->AppendItem(m_arithmeticId, "Multiplier");
+
+    m_memoryId = m_treeCtrl->AppendItem(m_rootId, "Memory", -1, -1);
+    m_treeCtrl->AppendItem(m_memoryId, "D Flip-Flop");
+    m_treeCtrl->AppendItem(m_memoryId, "Register");
+    m_treeCtrl->AppendItem(m_memoryId, "RAM");
+
+    m_inputOutputId = m_treeCtrl->AppendItem(m_rootId, "Input/Output", -1, -1);
+    m_treeCtrl->AppendItem(m_inputOutputId, "Button");
+    m_treeCtrl->AppendItem(m_inputOutputId, "LED");
+    m_treeCtrl->AppendItem(m_inputOutputId, "7-Segment Display");
+
+    m_baseId = m_treeCtrl->AppendItem(m_rootId, "Base", -1, -1);
+    m_treeCtrl->AppendItem(m_baseId, "Text");
+
+    m_treeCtrl->Expand(m_wiringId);
+    m_treeCtrl->Expand(m_gatesId);
+    m_treeCtrl->SelectItem(mainCircuit);
+}
+
+
+
+void LogisimFrame::CreateMenuBar()
+{
+    wxMenuBar* menuBar = new wxMenuBar;
+
+    wxMenu* fileMenu = new wxMenu;
+    fileMenu->Append(ID_NEW, "&New\tCtrl+N", "Create a new circuit");
+    fileMenu->Append(ID_OPEN, "&Open...\tCtrl+O", "Open an existing circuit");
+    fileMenu->Append(ID_SAVE, "&Save\tCtrl+S", "Save the current circuit");
+    fileMenu->AppendSeparator();
+    fileMenu->Append(ID_QUIT, "E&xit\tAlt+F4", "Quit this program");
+
+    wxMenu* editMenu = new wxMenu;
+    editMenu->Append(ID_UNDO, "&Undo\tCtrl+Z", "Undo the last action");
+    editMenu->Append(ID_REDO, "&Redo\tCtrl+Y", "Redo the last undone action");
+
+    wxMenu* windowMenu = new wxMenu;
+    windowMenu->AppendCheckItem(ID_GRID_SHOW, "Show &Grid", "Toggle grid display");
+
+    wxMenu* helpMenu = new wxMenu;
+    helpMenu->Append(ID_ABOUT, "&About...\tF1", "Show about dialog");
+
+    menuBar->Append(fileMenu, "&File");
+    menuBar->Append(editMenu, "&Edit");
+    menuBar->Append(windowMenu, "&Window");
+    menuBar->Append(helpMenu, "&Help");
+
+    SetMenuBar(menuBar);
+}
+
+// 关键的网格切换事件 - 使用双缓冲重绘
+void LogisimFrame::OnGridShow(wxCommandEvent& event)
+{
+    if (m_canvas) {
+        m_canvas->m_showGrid = !m_canvas->m_showGrid;
+        m_canvas->InvalidateBuffer();  // 标记缓冲区无效
+        m_canvas->Refresh();           // 触发重绘
+        SetTitle(m_canvas->m_showGrid ?
+            "Logisim: main of Untitled - Grid shown" :
+            "Logisim: main of Untitled - Grid hidden");
+    }
+}
+
+// 树形控件事件
+void LogisimFrame::OnTreeSelChanged(wxTreeEvent& event)
+{
+    wxTreeItemId itemId = event.GetItem();
+    if (!itemId.IsOk()) return;
+
+    wxString itemText = m_treeCtrl->GetItemText(itemId);
+    SetTitle("Logisim: main of Untitled - Selected: " + itemText);
+}
+
+void LogisimFrame::OnTreeItemActivated(wxTreeEvent& event)
+{
+    wxTreeItemId itemId = event.GetItem();
+    if (!itemId.IsOk()) return;
+
+    wxString itemText = m_treeCtrl->GetItemText(itemId);
+    SetTitle("Logisim: main of Untitled - Activated: " + itemText);
+}
+
+void LogisimFrame::OnTreeRightClick(wxTreeEvent& event)
+{
+    wxMenu contextMenu;
+    contextMenu.Append(wxID_ANY, "Add to Circuit");
+    contextMenu.Append(wxID_ANY, "Properties...");
+    PopupMenu(&contextMenu);
+}
+
+// 简化的事件处理函数
+void LogisimFrame::OnNew(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - New circuit"); }
+void LogisimFrame::OnOpen(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Open circuit"); }
+void LogisimFrame::OnSave(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Save circuit"); }
+void LogisimFrame::OnSaveAs(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Save As"); }
+void LogisimFrame::OnExportImage(wxCommandEvent& event) { }
+void LogisimFrame::OnPrint(wxCommandEvent& event) { }
+void LogisimFrame::OnPreferences(wxCommandEvent& event) { }
+void LogisimFrame::OnExit(wxCommandEvent& event) { Close(true); }
+void LogisimFrame::OnUndo(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Undo"); }
+void LogisimFrame::OnRedo(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Redo"); }
+void LogisimFrame::OnCut(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Cut"); }
+void LogisimFrame::OnCopy(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Copy"); }
+void LogisimFrame::OnPaste(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Paste"); }
+void LogisimFrame::OnDelete(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Delete"); }
+void LogisimFrame::OnSelectAll(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Select All"); }
+void LogisimFrame::OnAddGate(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Add Gate"); }
+void LogisimFrame::OnAddInput(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Add Input"); }
+void LogisimFrame::OnAddOutput(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Add Output"); }
+void LogisimFrame::OnAddWire(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Add Wire"); }
+void LogisimFrame::OnStartSimulation(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Start Simulation"); }
+void LogisimFrame::OnStopSimulation(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Stop Simulation"); }
+void LogisimFrame::OnStep(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Step"); }
+void LogisimFrame::OnReset(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Reset"); }
+void LogisimFrame::OnTickFrequency(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Tick Frequency"); }
+void LogisimFrame::OnZoomIn(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Zoom In"); }
+void LogisimFrame::OnZoomOut(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Zoom Out"); }
+void LogisimFrame::OnZoomFit(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Zoom Fit"); }
+void LogisimFrame::OnToolSelect(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Select Tool"); }
+void LogisimFrame::OnToolHand(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Hand Tool"); }
+void LogisimFrame::OnToolText(wxCommandEvent& event) { SetTitle("Logisim: main of Untitled - Text Tool"); }
+
+void LogisimFrame::OnAbout(wxCommandEvent& event)
+{
+    wxMessageBox("Logisim Circuit Simulator\n\nBased on wxWidgets framework\n\nFeatures:\n- Component library tree\n- Interactive toolbar\n- Circuit design canvas with double buffering\n- No-flicker mouse movement",
+        "About Logisim", wxOK | wxICON_INFORMATION);
+}
+
+void LogisimFrame::OnClose(wxCloseEvent& event)
+{
+    Destroy();
+}
+
+
