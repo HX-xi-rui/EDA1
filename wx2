@@ -8,18 +8,21 @@
 #include <wx/splitter.h>
 #include <wx/propgrid/propgrid.h>
 #include <wx/numdlg.h>
+#include <wx/grid.h>
 #include <vector>
 #include <memory>
 #include <cmath>
 #include <algorithm>
 #include <random>
 #include <unordered_map>
+#include <set>
 
 // 前向声明
 class CircuitElement;
 class Gate;
 class Wire;
 class CircuitCanvas;
+class TruthTableDialog;
 
 // 元素类型枚举
 enum ElementType {
@@ -485,6 +488,99 @@ private:
     Pin* endPin;
 };
 
+// 真值表对话框
+class TruthTableDialog : public wxDialog {
+public:
+    TruthTableDialog(wxWindow* parent, CircuitCanvas* canvas)
+        : wxDialog(parent, wxID_ANY, "Truth Table", wxDefaultPosition, wxSize(600, 400)), canvas(canvas) {
+
+        wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+
+        // 创建网格
+        grid = new wxGrid(this, wxID_ANY);
+        mainSizer->Add(grid, 1, wxEXPAND | wxALL, 5);
+
+        // 按钮
+        wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+        buttonSizer->Add(new wxButton(this, wxID_CLOSE, "Close"), 0, wxALL, 5);
+        buttonSizer->Add(new wxButton(this, wxID_REFRESH, "Refresh"), 0, wxALL, 5);
+
+        mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+
+        SetSizer(mainSizer);
+
+        // 绑定事件
+        Bind(wxEVT_BUTTON, &TruthTableDialog::OnClose, this, wxID_CLOSE);
+        Bind(wxEVT_BUTTON, &TruthTableDialog::OnRefresh, this, wxID_REFRESH);
+
+        GenerateTruthTable();
+    }
+
+    void GenerateTruthTable() {
+        // 获取所有输入和输出引脚
+        std::vector<InputOutput*> inputPins;
+        std::vector<InputOutput*> outputPins;
+
+        // 在实际应用中，这里需要获取画布中的所有输入输出引脚
+        // 这里只是示例，需要根据实际数据结构实现
+
+        // 清除现有网格
+        if (grid->GetNumberRows() > 0) {
+            grid->DeleteRows(0, grid->GetNumberRows());
+        }
+        if (grid->GetNumberCols() > 0) {
+            grid->DeleteCols(0, grid->GetNumberCols());
+        }
+
+        // 示例数据 - 在实际应用中需要根据电路动态生成
+        int numInputs = 2;
+        int numOutputs = 1;
+
+        // 创建列
+        grid->CreateGrid(1 << numInputs, numInputs + numOutputs);
+
+        // 设置列标签
+        for (int i = 0; i < numInputs; i++) {
+            grid->SetColLabelValue(i, wxString::Format("Input %d", i + 1));
+        }
+        for (int i = 0; i < numOutputs; i++) {
+            grid->SetColLabelValue(numInputs + i, wxString::Format("Output %d", i + 1));
+        }
+
+        // 填充真值表
+        for (int row = 0; row < (1 << numInputs); row++) {
+            for (int col = 0; col < numInputs; col++) {
+                bool value = (row >> (numInputs - col - 1)) & 1;
+                grid->SetCellValue(row, col, value ? "1" : "0");
+                grid->SetCellAlignment(row, col, wxALIGN_CENTER, wxALIGN_CENTER);
+            }
+
+            // 这里应该根据电路逻辑计算输出值
+            // 示例：简单的AND门逻辑
+            bool input1 = (row >> 1) & 1;
+            bool input2 = row & 1;
+            bool output = input1 && input2;
+
+            grid->SetCellValue(row, numInputs, output ? "1" : "0");
+            grid->SetCellAlignment(row, numInputs, wxALIGN_CENTER, wxALIGN_CENTER);
+        }
+
+        grid->AutoSize();
+    }
+
+private:
+    void OnClose(wxCommandEvent& event) {
+        Close();
+    }
+
+    void OnRefresh(wxCommandEvent& event) {
+        GenerateTruthTable();
+    }
+
+    wxGrid* grid;
+    CircuitCanvas* canvas;
+};
+
 // 画布类
 class CircuitCanvas : public wxWindow {
 public:
@@ -668,6 +764,17 @@ public:
         }
     }
 
+    void DeleteAll() {
+        if (wxMessageBox("Are you sure you want to delete all elements?", "Confirm Delete All",
+            wxYES_NO | wxICON_QUESTION, GetParent()) == wxYES) {
+            elements.clear();
+            wires.clear();
+            selectedElement = nullptr;
+            startPin = nullptr;
+            Refresh();
+        }
+    }
+
     void ZoomIn() {
         zoomLevel *= 1.2;
         Refresh();
@@ -695,6 +802,33 @@ public:
                 Refresh();
             }
         }
+    }
+
+    void ShowTruthTable() {
+        TruthTableDialog dialog(GetParent(), this);
+        dialog.ShowModal();
+    }
+
+    // 获取所有输入引脚
+    std::vector<InputOutput*> GetInputPins() const {
+        std::vector<InputOutput*> inputs;
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_INPUT) {
+                inputs.push_back(dynamic_cast<InputOutput*>(element.get()));
+            }
+        }
+        return inputs;
+    }
+
+    // 获取所有输出引脚
+    std::vector<InputOutput*> GetOutputPins() const {
+        std::vector<InputOutput*> outputs;
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_OUTPUT) {
+                outputs.push_back(dynamic_cast<InputOutput*>(element.get()));
+            }
+        }
+        return outputs;
     }
 
 private:
@@ -1035,6 +1169,7 @@ public:
         editMenu->Append(wxID_PASTE, "&Paste\tCtrl+V", "Paste from clipboard");
         editMenu->AppendSeparator();
         editMenu->Append(wxID_DELETE, "&Delete\tDel", "Delete the selection");
+        editMenu->Append(ID_DELETE_ALL, "Delete &All", "Delete all elements");
         editMenu->Append(wxID_SELECTALL, "Select &All\tCtrl+A", "Select all elements");
         editMenu->AppendSeparator();
         editMenu->Append(ID_RENAME, "Re&name\tF2", "Rename selected element");
@@ -1046,6 +1181,8 @@ public:
         simMenu->AppendSeparator();
         simMenu->Append(ID_RESET, "&Reset", "Reset the simulation");
         simMenu->Append(ID_STEP, "&Step\tF7", "Single simulation step");
+        simMenu->AppendSeparator();
+        simMenu->Append(ID_TRUTH_TABLE, "&Truth Table\tT", "Show truth table");
 
         // 视图菜单
         wxMenu* viewMenu = new wxMenu();
@@ -1106,7 +1243,9 @@ public:
         ID_TOOL_NOR,
         ID_TOOL_INPUT,
         ID_TOOL_OUTPUT,
-        ID_RENAME
+        ID_RENAME,
+        ID_DELETE_ALL,
+        ID_TRUTH_TABLE
     };
 
 private:
@@ -1141,6 +1280,10 @@ public:
         AddTool(ID_START_SIM, "Start", wxArtProvider::GetBitmap(wxART_GO_FORWARD), "Start Simulation");
         AddTool(ID_STOP_SIM, "Stop", wxArtProvider::GetBitmap(wxART_STOP), "Stop Simulation");
         AddTool(ID_STEP, "Step", wxArtProvider::GetBitmap(wxART_GO_DOWN), "Single Step");
+        AddSeparator();
+
+        AddTool(ID_TRUTH_TABLE, "Truth Table", wxArtProvider::GetBitmap(wxART_LIST_VIEW), "Show Truth Table");
+        AddTool(ID_DELETE_ALL, "Delete All", wxArtProvider::GetBitmap(wxART_DELETE), "Delete All Elements");
 
         Realize();
 
@@ -1149,7 +1292,7 @@ public:
     }
 
     enum {
-        ID_SELECT = MainMenu::ID_RENAME + 1,
+        ID_SELECT = MainMenu::ID_TRUTH_TABLE + 1,
         ID_WIRE,
         ID_AND,
         ID_OR,
@@ -1161,7 +1304,9 @@ public:
         ID_OUTPUT,
         ID_START_SIM,
         ID_STOP_SIM,
-        ID_STEP
+        ID_STEP,
+        ID_DELETE_ALL,
+        ID_TRUTH_TABLE
     };
 
 private:
@@ -1373,6 +1518,16 @@ private:
             }
             break;
 
+        case MainMenu::ID_DELETE_ALL:
+            canvas->DeleteAll();
+            GetStatusBar()->SetStatusText("All elements deleted");
+            break;
+
+        case MainMenu::ID_TRUTH_TABLE:
+            canvas->ShowTruthTable();
+            GetStatusBar()->SetStatusText("Truth table displayed");
+            break;
+
         case wxID_ABOUT:
             wxMessageBox("Logisim-like Circuit Simulator\n\n"
                 "A simple digital logic circuit simulator built with wxWidgets\n\n"
@@ -1384,7 +1539,9 @@ private:
                 "- Grid alignment\n"
                 "- Zoom functionality\n"
                 "- Property editing\n"
-                "- File save/load functionality",
+                "- File save/load functionality\n"
+                "- Truth table generation\n"
+                "- Delete all elements functionality",
                 "About", wxOK | wxICON_INFORMATION, this);
             break;
 
@@ -1397,7 +1554,9 @@ private:
                 "5. Press Delete to delete selected components\n"
                 "6. Use Simulation menu to start/stop simulation\n"
                 "7. Use View menu to toggle grid display and zoom\n"
-                "8. Use Properties panel to edit component properties\n\n"
+                "8. Use Properties panel to edit component properties\n"
+                "9. Use Truth Table to see circuit logic\n"
+                "10. Use Delete All to remove all elements\n\n"
                 "Keyboard Shortcuts:\n"
                 "A - AND Gate\n"
                 "O - OR Gate\n"
@@ -1408,6 +1567,7 @@ private:
                 "W - Wire Tool\n"
                 "S - Selection Tool\n"
                 "G - Toggle Grid\n"
+                "T - Truth Table\n"
                 "Delete - Delete selected component\n"
                 "F2 - Rename selected element\n"
                 "Ctrl++ - Zoom in\n"
@@ -1490,6 +1650,16 @@ private:
             canvas->UpdateCircuit();
             canvas->Refresh();
             GetStatusBar()->SetStatusText("Simulation step executed");
+            break;
+
+        case MainToolbar::ID_DELETE_ALL:
+            canvas->DeleteAll();
+            GetStatusBar()->SetStatusText("All elements deleted");
+            break;
+
+        case MainToolbar::ID_TRUTH_TABLE:
+            canvas->ShowTruthTable();
+            GetStatusBar()->SetStatusText("Truth table displayed");
             break;
 
         default:
