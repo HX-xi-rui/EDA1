@@ -1,0 +1,175 @@
+// 元件树控件类
+class ElementTreeCtrl : public wxTreeCtrl {
+public:
+    ElementTreeCtrl(wxWindow* parent, CircuitCanvas* canvas)
+        : wxTreeCtrl(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+            wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT | wxTR_SINGLE),
+        canvas(canvas) {
+
+        // 创建根节点（隐藏）
+        root = AddRoot("Circuit Elements");
+
+        // 创建分类节点
+        gatesNode = AppendItem(root, "Logic Gates");
+        ioNode = AppendItem(root, "Input/Output");
+        wiresNode = AppendItem(root, "Wires");
+
+        // 初始化工具映射
+        InitializeToolMap();
+
+        // 展开所有节点
+        ExpandAll();
+
+        // 绑定事件
+        Bind(wxEVT_TREE_SEL_CHANGED, &ElementTreeCtrl::OnSelectionChanged, this);
+        Bind(wxEVT_TREE_ITEM_ACTIVATED, &ElementTreeCtrl::OnItemActivated, this);
+    }
+
+    void UpdateTree() {
+        // 清除现有元素节点
+        DeleteChildren(gatesNode);
+        DeleteChildren(ioNode);
+        DeleteChildren(wiresNode);
+
+        // 添加逻辑门工具项
+        wxTreeItemId andItem = AppendItem(gatesNode, "AND Gate");
+        toolMap[andItem] = TYPE_AND;
+
+        wxTreeItemId orItem = AppendItem(gatesNode, "OR Gate");
+        toolMap[orItem] = TYPE_OR;
+
+        wxTreeItemId notItem = AppendItem(gatesNode, "NOT Gate");
+        toolMap[notItem] = TYPE_NOT;
+
+        wxTreeItemId xorItem = AppendItem(gatesNode, "XOR Gate");
+        toolMap[xorItem] = TYPE_XOR;
+
+        wxTreeItemId nandItem = AppendItem(gatesNode, "NAND Gate");
+        toolMap[nandItem] = TYPE_NAND;
+
+        wxTreeItemId norItem = AppendItem(gatesNode, "NOR Gate");
+        toolMap[norItem] = TYPE_NOR;
+
+        // 添加输入输出工具项
+        wxTreeItemId inputItem = AppendItem(ioNode, "Input Pin");
+        toolMap[inputItem] = TYPE_INPUT;
+
+        wxTreeItemId outputItem = AppendItem(ioNode, "Output Pin");
+        toolMap[outputItem] = TYPE_OUTPUT;
+
+        // 添加导线工具项
+        wxTreeItemId wireItem = AppendItem(wiresNode, "Wire Tool");
+        toolMap[wireItem] = TYPE_WIRE;
+
+        // 添加选择工具项
+        wxTreeItemId selectItem = AppendItem(wiresNode, "Selection Tool");
+        toolMap[selectItem] = TYPE_SELECT;
+
+        // 添加实际电路中的元件
+        const auto& elements = canvas->GetElements();
+        for (const auto& element : elements) {
+            wxTreeItemId parentNode;
+            switch (element->GetType()) {
+            case TYPE_AND:
+            case TYPE_OR:
+            case TYPE_NOT:
+            case TYPE_XOR:
+            case TYPE_NAND:
+            case TYPE_NOR:
+                parentNode = gatesNode;
+                break;
+            case TYPE_INPUT:
+            case TYPE_OUTPUT:
+                parentNode = ioNode;
+                break;
+            default:
+                continue;
+            }
+
+            wxString itemText = element->GetDisplayName() +
+                wxString::Format(" (X:%d, Y:%d)",
+                    element->GetX(), element->GetY());
+            wxTreeItemId itemId = AppendItem(parentNode, itemText);
+            elementMap[itemId] = element.get();
+        }
+
+        // 添加导线
+        const auto& wires = canvas->GetWires();
+        for (size_t i = 0; i < wires.size(); ++i) {
+            wxString wireText = wxString::Format("Wire %zu", i + 1);
+            wxTreeItemId itemId = AppendItem(wiresNode, wireText);
+            wireMap[itemId] = wires[i].get();
+        }
+
+        ExpandAll();
+    }
+
+private:
+    std::map<wxTreeItemId, CircuitElement*> elementMap;
+    std::map<wxTreeItemId, Wire*> wireMap;
+    void InitializeToolMap() {
+        // 这个映射将在 UpdateTree 中填充
+    }
+
+    void OnSelectionChanged(wxTreeEvent& event) {
+        wxTreeItemId itemId = event.GetItem();
+        if (itemId.IsOk() && toolMap.find(itemId) != toolMap.end()) {
+            ElementType selectedTool = toolMap[itemId];
+            canvas->SetCurrentTool(selectedTool);
+
+            // 更新状态栏显示（通过主窗口）
+            wxWindow* topWindow = wxGetTopLevelParent(this);
+            if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
+                wxFrame* frame = static_cast<wxFrame*>(topWindow);
+                wxStatusBar* statusBar = frame->GetStatusBar();
+                if (statusBar) {
+                    wxString toolName = GetToolName(selectedTool);
+                    statusBar->SetStatusText(wxString::Format("%s selected from tree", toolName));
+                }
+            }
+        }
+        event.Skip();
+    }
+
+    void OnItemActivated(wxTreeEvent& event) {
+        wxTreeItemId itemId = event.GetItem();
+        if (itemId.IsOk() && toolMap.find(itemId) != toolMap.end()) {
+            ElementType selectedTool = toolMap[itemId];
+            canvas->SetCurrentTool(selectedTool);
+
+            // 在画布上自动放置一个元件（如果是元件工具）
+            if (selectedTool != TYPE_SELECT && selectedTool != TYPE_WIRE) {
+                // 获取画布中心位置
+                wxSize canvasSize = canvas->GetClientSize();
+                wxPoint centerPos(canvasSize.GetWidth() / 2, canvasSize.GetHeight() / 2);
+
+                // 创建新元件（这里需要扩展 CircuitCanvas 的功能）
+                canvas->CreateElementAtPosition(selectedTool, centerPos);
+            }
+        }
+        event.Skip();
+    }
+
+    wxString GetToolName(ElementType tool) {
+        switch (tool) {
+        case TYPE_SELECT: return "Selection Tool";
+        case TYPE_AND: return "AND Gate";
+        case TYPE_OR: return "OR Gate";
+        case TYPE_NOT: return "NOT Gate";
+        case TYPE_XOR: return "XOR Gate";
+        case TYPE_NAND: return "NAND Gate";
+        case TYPE_NOR: return "NOR Gate";
+        case TYPE_INPUT: return "Input Pin";
+        case TYPE_OUTPUT: return "Output Pin";
+        case TYPE_WIRE: return "Wire Tool";
+        default: return "Unknown Tool";
+        }
+    }
+
+    wxTreeItemId root;
+    wxTreeItemId gatesNode;
+    wxTreeItemId ioNode;
+    wxTreeItemId wiresNode;
+    CircuitCanvas* canvas;
+    std::map<wxTreeItemId, ElementType> toolMap;
+};
