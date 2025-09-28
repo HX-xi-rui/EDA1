@@ -1,0 +1,43 @@
+// 电路元素基类
+class CircuitElement {
+public:
+    CircuitElement(ElementType type, int x, int y) : type(type), posX(x), posY(y), selected(false) {}
+    virtual ~CircuitElement() {}
+
+    ElementType GetType() const { return type; }
+    int GetX() const { return posX; }
+    int GetY() const { return posY; }
+    void SetPosition(int x, int y) {
+        int dx = x - posX;
+        int dy = y - posY;
+        posX = x;
+        posY = y;
+
+        // 更新引脚位置
+        for (auto pin : GetPins()) {
+            pin->SetPosition(pin->GetX() + dx, pin->GetY() + dy);
+        }
+    }
+    bool IsSelected() const { return selected; }
+    void SetSelected(bool sel) { selected = sel; }
+
+    virtual void Draw(wxDC& dc) = 0;
+    virtual void Update() = 0;
+    virtual std::vector<Pin*> GetPins() = 0;
+    virtual wxRect GetBoundingBox() const = 0;
+    virtual wxString GetName() const = 0;
+    virtual wxString GetDisplayName() const = 0;
+
+    // 序列化接口
+    virtual void Serialize(wxString& data) const = 0;
+    virtual void Deserialize(const wxString& data) = 0;
+
+    // 获取属性用于属性网格
+    virtual void GetProperties(wxPropertyGrid* pg) const = 0;
+    virtual void SetProperties(wxPropertyGrid* pg) = 0;
+
+protected:
+    ElementType type;
+    int posX, posY;
+    bool selected;
+};
