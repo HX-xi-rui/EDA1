@@ -1,0 +1,632 @@
+// 画布类
+class CircuitCanvas : public wxWindow {
+public:
+    CircuitCanvas(wxWindow* parent) : wxWindow(parent, wxID_ANY),
+        currentTool(TYPE_SELECT), wiringMode(false), selectedElement(nullptr),
+        startPin(nullptr), simulating(false), showGrid(true), zoomLevel(1.0),
+        autoPlaceMode(false), autoPlaceType(TYPE_SELECT) {
+
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        Bind(wxEVT_PAINT, &CircuitCanvas::OnPaint, this);
+        Bind(wxEVT_LEFT_DOWN, &CircuitCanvas::OnLeftDown, this);
+        Bind(wxEVT_LEFT_UP, &CircuitCanvas::OnLeftUp, this);
+        Bind(wxEVT_MOTION, &CircuitCanvas::OnMouseMove, this);
+        Bind(wxEVT_RIGHT_DOWN, &CircuitCanvas::OnRightDown, this);
+        Bind(wxEVT_MOUSEWHEEL, &CircuitCanvas::OnMouseWheel, this);
+        Bind(wxEVT_KEY_DOWN, &CircuitCanvas::OnKeyDown, this);
+        Bind(wxEVT_SIZE, &CircuitCanvas::OnSize, this);
+        Bind(wxEVT_MENU, &CircuitCanvas::OnContextMenu, this);
+        SetFocus();
+    }
+
+    // 新增：设置自动放置模式
+    void SetAutoPlaceMode(ElementType type) {
+        autoPlaceMode = (type != TYPE_SELECT && type != TYPE_WIRE);
+        autoPlaceType = type;
+        currentTool = type;
+        wiringMode = (type == TYPE_WIRE);
+
+        if (autoPlaceMode) {
+            // 设置鼠标光标为十字准星
+            SetCursor(wxCursor(wxCURSOR_CROSS));
+            // 显示提示信息
+            wxWindow* topWindow = wxGetTopLevelParent(this);
+            if (topWindow) {
+                wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
+                if (statusBar) {
+                    statusBar->SetStatusText("Click on canvas to place " + GetToolName(type));
+                }
+            }
+        }
+        else {
+            SetCursor(wxCursor(wxCURSOR_ARROW));
+        }
+
+        Refresh();
+    }
+
+    void CreateElementAtPosition(ElementType type, const wxPoint& pos) {
+        if (type >= TYPE_AND && type <= TYPE_NOR) {
+            elements.push_back(std::make_unique<Gate>(type, pos.x, pos.y));
+        }
+        else if (type == TYPE_INPUT || type == TYPE_OUTPUT) {
+            elements.push_back(std::make_unique<InputOutput>(type, pos.x, pos.y));
+        }
+        Refresh();
+    }
+
+    void OnContextMenu(wxCommandEvent& event) {
+        switch (event.GetId()) {
+        case wxID_DELETE:
+            DeleteSelectedElement();
+            break;
+        case wxID_PROPERTIES:
+            break;
+        default:
+            break;
+        }
+    }
+
+    void SetCurrentTool(ElementType tool) {
+        currentTool = tool;
+        wiringMode = (tool == TYPE_WIRE);
+        autoPlaceMode = false; // 重置自动放置模式
+
+        if (!wiringMode) {
+            startPin = nullptr;
+        }
+
+        SetCursor(wxCursor(wxCURSOR_ARROW));
+        Refresh();
+    }
+
+    void DeleteSelectedElement() {
+        if (selectedElement) {
+            wxMessageDialog dialog(GetParent(),
+                "Are you sure you want to delete the selected element?",
+                "Confirm Delete",
+                wxYES_NO | wxICON_QUESTION);
+
+            if (dialog.ShowModal() == wxID_YES) {
+                auto pins = selectedElement->GetPins();
+                for (auto& pin : pins) {
+                    for (auto wireIt = wires.begin(); wireIt != wires.end(); ) {
+                        if ((*wireIt)->GetStartPin() == pin || (*wireIt)->GetEndPin() == pin) {
+                            wireIt = wires.erase(wireIt);
+                        }
+                        else {
+                            ++wireIt;
+                        }
+                    }
+                }
+
+                auto it = std::find_if(elements.begin(), elements.end(),
+                    [this](const std::unique_ptr<CircuitElement>& elem) {
+                        return elem.get() == selectedElement;
+                    });
+
+                if (it != elements.end()) {
+                    elements.erase(it);
+                }
+
+                selectedElement = nullptr;
+                Refresh();
+            }
+        }
+    }
+
+    void StartSimulation() {
+        simulating = true;
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, 1);
+
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_INPUT) {
+                InputOutput* io = dynamic_cast<InputOutput*>(element.get());
+                if (io) {
+                    io->SetValue(dis(gen) == 0);
+                }
+            }
+        }
+        UpdateCircuit();
+        Refresh();
+    }
+
+    const std::vector<std::unique_ptr<CircuitElement>>& GetElements() const {
+        return elements;
+    }
+
+    const std::vector<std::unique_ptr<Wire>>& GetWires() const {
+        return wires;
+    }
+
+    void StopSimulation() {
+        simulating = false;
+        Refresh();
+    }
+
+    void UpdateCircuit() {
+        for (int i = 0; i < 5; ++i) {
+            for (auto& element : elements) {
+                if (element->GetType() == TYPE_INPUT) {
+                    element->Update();
+                }
+            }
+
+            for (auto& wire : wires) {
+                wire->Update();
+            }
+
+            for (auto& element : elements) {
+                if (element->GetType() >= TYPE_AND && element->GetType() <= TYPE_NOR) {
+                    element->Update();
+                }
+            }
+
+            for (auto& wire : wires) {
+                wire->Update();
+            }
+
+            for (auto& element : elements) {
+                if (element->GetType() == TYPE_OUTPUT) {
+                    element->Update();
+                }
+            }
+        }
+    }
+
+    void Clear() {
+        elements.clear();
+        wires.clear();
+        selectedElement = nullptr;
+        startPin = nullptr;
+        autoPlaceMode = false;
+        Refresh();
+    }
+
+    bool SaveCircuit(const wxString& filename) {
+        wxFile file;
+        if (file.Create(filename, true)) {
+            wxString data;
+
+            for (auto& element : elements) {
+                element->Serialize(data);
+                data += "\n";
+            }
+
+            for (auto& wire : wires) {
+                wire->Serialize(data);
+                data += "\n";
+            }
+
+            file.Write(data);
+            file.Close();
+            return true;
+        }
+        return false;
+    }
+
+    bool LoadCircuit(const wxString& filename) {
+        wxFile file;
+        if (file.Open(filename)) {
+            wxString data;
+            file.ReadAll(&data);
+            file.Close();
+
+            Clear();
+
+            wxStringTokenizer lines(data, "\n");
+            while (lines.HasMoreTokens()) {
+                wxString line = lines.GetNextToken();
+                wxStringTokenizer tokens(line, ",");
+
+                if (tokens.HasMoreTokens()) {
+                    wxString typeStr = tokens.GetNextToken();
+                    if (typeStr == "wire") {
+                        if (tokens.CountTokens() >= 2) {
+                            wxString startId = tokens.GetNextToken();
+                            wxString endId = tokens.GetNextToken();
+                        }
+                    }
+                    else {
+                        long typeVal;
+                        typeStr.ToLong(&typeVal);
+                        ElementType type = static_cast<ElementType>(typeVal);
+
+                        if (type >= TYPE_AND && type <= TYPE_NOR) {
+                            auto gate = std::make_unique<Gate>(type, 0, 0);
+                            gate->Deserialize(line);
+                            elements.push_back(std::move(gate));
+                        }
+                        else if (type == TYPE_INPUT || type == TYPE_OUTPUT) {
+                            auto io = std::make_unique<InputOutput>(type, 0, 0);
+                            io->Deserialize(line);
+                            elements.push_back(std::move(io));
+                        }
+                    }
+                }
+            }
+
+            Refresh();
+            return true;
+        }
+        return false;
+    }
+
+    void ToggleGrid() {
+        showGrid = !showGrid;
+        Refresh();
+    }
+
+    void DeleteAll() {
+        if (wxMessageBox("Are you sure you want to delete all elements?", "Confirm Delete All",
+            wxYES_NO | wxICON_QUESTION, GetParent()) == wxYES) {
+            elements.clear();
+            wires.clear();
+            selectedElement = nullptr;
+            startPin = nullptr;
+            autoPlaceMode = false;
+            Refresh();
+        }
+    }
+
+    void ZoomIn() {
+        zoomLevel *= 1.2;
+        Refresh();
+    }
+
+    void ZoomOut() {
+        zoomLevel /= 1.2;
+        Refresh();
+    }
+
+    void ResetZoom() {
+        zoomLevel = 1.0;
+        Refresh();
+    }
+
+    double GetZoomLevel() const { return zoomLevel; }
+
+    CircuitElement* GetSelectedElement() const { return selectedElement; }
+
+    void RenameSelectedElement(const wxString& newName) {
+        if (selectedElement) {
+            InputOutput* io = dynamic_cast<InputOutput*>(selectedElement);
+            if (io) {
+                io->SetName(newName);
+                Refresh();
+            }
+        }
+    }
+
+    void ShowTruthTable();
+
+    std::vector<InputOutput*> GetInputPins() const {
+        std::vector<InputOutput*> inputs;
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_INPUT) {
+                inputs.push_back(dynamic_cast<InputOutput*>(element.get()));
+            }
+        }
+        return inputs;
+    }
+
+    std::vector<InputOutput*> GetOutputPins() const {
+        std::vector<InputOutput*> outputs;
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_OUTPUT) {
+                outputs.push_back(dynamic_cast<InputOutput*>(element.get()));
+            }
+        }
+        return outputs;
+    }
+
+    bool IsInAutoPlaceMode() const { return autoPlaceMode; }
+    ElementType GetAutoPlaceType() const { return autoPlaceType; }
+
+private:
+    void OnPaint(wxPaintEvent& event) {
+        wxAutoBufferedPaintDC dc(this);
+        dc.Clear();
+
+        dc.SetUserScale(zoomLevel, zoomLevel);
+
+        if (showGrid) {
+            dc.SetPen(wxPen(wxColour(220, 220, 220), 1));
+            int width, height;
+            GetClientSize(&width, &height);
+            width /= zoomLevel;
+            height /= zoomLevel;
+
+            for (int x = 0; x < width; x += 20) {
+                dc.DrawLine(x, 0, x, height);
+            }
+            for (int y = 0; y < height; y += 20) {
+                dc.DrawLine(0, y, width, y);
+            }
+        }
+
+        for (auto& wire : wires) {
+            wire->Draw(dc);
+        }
+
+        for (auto& element : elements) {
+            element->Draw(dc);
+        }
+
+        if (wiringMode && startPin) {
+            dc.SetPen(wxPen(*wxBLUE, 2, wxPENSTYLE_DOT));
+            dc.DrawLine(startPin->GetX(), startPin->GetY(), lastMousePos.x, lastMousePos.y);
+        }
+
+        // 绘制自动放置预览
+        if (autoPlaceMode && !simulating) {
+            DrawAutoPlacePreview(dc, lastMousePos);
+        }
+
+        dc.SetUserScale(1.0, 1.0);
+        if (!simulating) {
+            dc.SetTextForeground(*wxBLUE);
+            wxString toolText = GetToolName(currentTool);
+            if (autoPlaceMode) {
+                toolText += " - Click to place";
+            }
+            dc.DrawText(toolText, 10, 10);
+            dc.DrawText(wxString::Format("Zoom: %.0f%%", zoomLevel * 100), 10, 30);
+        }
+        else {
+            dc.SetTextForeground(*wxRED);
+            dc.DrawText("SIMULATION RUNNING", 10, 10);
+        }
+    }
+
+    void DrawAutoPlacePreview(wxDC& dc, const wxPoint& pos) {
+        dc.SetPen(wxPen(*wxLIGHT_GREY, 1, wxPENSTYLE_DOT));
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+
+        switch (autoPlaceType) {
+        case TYPE_AND:
+        case TYPE_OR:
+        case TYPE_NOT:
+        case TYPE_XOR:
+        case TYPE_NAND:
+        case TYPE_NOR:
+            dc.DrawRectangle(pos.x - 15, pos.y - 15, 30, 30);
+            break;
+        case TYPE_INPUT:
+        case TYPE_OUTPUT:
+            dc.DrawRectangle(pos.x - 15, pos.y - 15, 30, 30);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void OnLeftDown(wxMouseEvent& event) {
+        wxPoint pos = event.GetPosition();
+        pos.x /= zoomLevel;
+        pos.y /= zoomLevel;
+        lastMousePos = pos;
+
+        if (autoPlaceMode) {
+            // 自动放置模式：直接创建元件
+            CreateElementAtPosition(autoPlaceType, pos);
+
+            // 保持在自动放置模式，允许连续放置多个相同元件
+            // 如果用户想退出自动放置模式，可以按ESC键或选择其他工具
+            return;
+        }
+
+        if (currentTool == TYPE_SELECT) {
+            selectedElement = nullptr;
+            for (auto it = elements.rbegin(); it != elements.rend(); ++it) {
+                if ((*it)->GetBoundingBox().Contains(pos)) {
+                    selectedElement = it->get();
+                    (*it)->SetSelected(true);
+                    dragStartPos = pos;
+                    elementStartPos = wxPoint((*it)->GetX(), (*it)->GetY());
+                    break;
+                }
+            }
+
+            if (selectedElement == nullptr) {
+                for (auto& element : elements) {
+                    element->SetSelected(false);
+                }
+            }
+        }
+        else if (wiringMode) {
+            Pin* pin = FindPinAt(pos);
+            if (pin) {
+                if (startPin == nullptr) {
+                    startPin = pin;
+                }
+                else if (pin != startPin) {
+                    if (startPin->IsInput() != pin->IsInput()) {
+                        if (startPin->IsInput()) {
+                            wires.push_back(std::make_unique<Wire>(pin, startPin));
+                        }
+                        else {
+                            wires.push_back(std::make_unique<Wire>(startPin, pin));
+                        }
+                        UpdateCircuit();
+                    }
+                    startPin = nullptr;
+                }
+            }
+            else if (startPin != nullptr) {
+                startPin = nullptr;
+            }
+        }
+        else {
+            // 传统模式：点击创建元件
+            CreateElementAtPosition(currentTool, pos);
+        }
+
+        Refresh();
+    }
+
+    void OnLeftUp(wxMouseEvent& event) {
+        if (selectedElement) {
+            selectedElement->SetSelected(false);
+        }
+    }
+
+    void OnMouseMove(wxMouseEvent& event) {
+        wxPoint pos = event.GetPosition();
+        pos.x /= zoomLevel;
+        pos.y /= zoomLevel;
+        lastMousePos = pos;
+
+        if (event.Dragging() && selectedElement && currentTool == TYPE_SELECT) {
+            int gridSize = 20;
+            int x = elementStartPos.x + (pos.x - dragStartPos.x);
+            int y = elementStartPos.y + (pos.y - dragStartPos.y);
+
+            x = (x / gridSize) * gridSize;
+            y = (y / gridSize) * gridSize;
+
+            selectedElement->SetPosition(x, y);
+            Refresh();
+        }
+
+        if (wiringMode && startPin) {
+            Refresh();
+        }
+
+        // 在自动放置模式下实时刷新预览
+        if (autoPlaceMode) {
+            Refresh();
+        }
+    }
+
+    void OnRightDown(wxMouseEvent& event) {
+        wxPoint pos = event.GetPosition();
+        pos.x /= zoomLevel;
+        pos.y /= zoomLevel;
+
+        CircuitElement* clickedElement = nullptr;
+        for (auto& element : elements) {
+            if (element->GetBoundingBox().Contains(pos)) {
+                clickedElement = element.get();
+                break;
+            }
+        }
+
+        if (clickedElement) {
+            if (selectedElement) {
+                selectedElement->SetSelected(false);
+            }
+            selectedElement = clickedElement;
+            selectedElement->SetSelected(true);
+
+            wxMenu contextMenu;
+            contextMenu.Append(wxID_DELETE, "Delete Element");
+            contextMenu.Append(wxID_PROPERTIES, "Properties");
+
+            PopupMenu(&contextMenu, event.GetPosition());
+            Refresh();
+        }
+        else {
+            for (auto& wire : wires) {
+                if (wire->ContainsPoint(pos)) {
+                    return;
+                }
+            }
+
+            if (selectedElement) {
+                selectedElement->SetSelected(false);
+                selectedElement = nullptr;
+                Refresh();
+            }
+        }
+    }
+
+    void OnMouseWheel(wxMouseEvent& event) {
+        if (event.GetWheelRotation() > 0) {
+            ZoomIn();
+        }
+        else {
+            ZoomOut();
+        }
+    }
+
+    void OnKeyDown(wxKeyEvent& event) {
+        switch (event.GetKeyCode()) {
+        case WXK_DELETE:
+            DeleteSelectedElement();
+            break;
+        case WXK_ESCAPE:
+            if (autoPlaceMode) {
+                // 退出自动放置模式
+                autoPlaceMode = false;
+                SetCursor(wxCursor(wxCURSOR_ARROW));
+                Refresh();
+            }
+            else if (wiringMode && startPin) {
+                startPin = nullptr;
+                Refresh();
+            }
+            break;
+        case 'G':
+            ToggleGrid();
+            break;
+        default:
+            event.Skip();
+            break;
+        }
+    }
+
+    void OnSize(wxSizeEvent& event) {
+        Refresh();
+        event.Skip();
+    }
+
+    Pin* FindPinAt(const wxPoint& pos) {
+        for (auto& element : elements) {
+            for (auto pin : element->GetPins()) {
+                int dx = pin->GetX() - pos.x;
+                int dy = pin->GetY() - pos.y;
+                if (std::sqrt(dx * dx + dy * dy) < 5) {
+                    return pin;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    wxString GetToolName(ElementType tool) {
+        switch (tool) {
+        case TYPE_SELECT: return "Selection Tool";
+        case TYPE_AND: return "AND Gate";
+        case TYPE_OR: return "OR Gate";
+        case TYPE_NOT: return "NOT Gate";
+        case TYPE_XOR: return "XOR Gate";
+        case TYPE_NAND: return "NAND Gate";
+        case TYPE_NOR: return "NOR Gate";
+        case TYPE_INPUT: return "Input Pin";
+        case TYPE_OUTPUT: return "Output Pin";
+        case TYPE_WIRE: return "Wire Tool";
+        default: return "Unknown Tool";
+        }
+    }
+
+    ElementType currentTool;
+    bool wiringMode;
+    bool simulating;
+    bool showGrid;
+    double zoomLevel;
+    CircuitElement* selectedElement;
+    Pin* startPin;
+    wxPoint lastMousePos;
+    wxPoint dragStartPos;
+    wxPoint elementStartPos;
+
+    // 新增：自动放置模式相关变量
+    bool autoPlaceMode;
+    ElementType autoPlaceType;
+
+    std::vector<std::unique_ptr<CircuitElement>> elements;
+    std::vector<std::unique_ptr<Wire>> wires;
+};
