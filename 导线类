@@ -1,0 +1,69 @@
+// 导线类
+class Wire {
+public:
+    Wire(Pin* start, Pin* end) : startPin(start), endPin(end) {
+        start->SetConnectedWire(this);
+        end->SetConnectedWire(this);
+    }
+
+    void Draw(wxDC& dc) {
+        bool value = startPin->GetValue();
+        dc.SetPen(value ? wxPen(*wxGREEN, 2) : wxPen(*wxRED, 2));
+        dc.DrawLine(startPin->GetX(), startPin->GetY(), endPin->GetX(), endPin->GetY());
+    }
+
+    void Update() {
+        // 将起始引脚的值传递到结束引脚
+        if (startPin && endPin) {
+            endPin->SetValue(startPin->GetValue());
+        }
+    }
+
+    Pin* GetStartPin() const { return startPin; }
+    Pin* GetEndPin() const { return endPin; }
+
+    bool ContainsPoint(const wxPoint& point) const {
+        if (!startPin || !endPin) return false;
+
+        int x1 = startPin->GetX(), y1 = startPin->GetY();
+        int x2 = endPin->GetX(), y2 = endPin->GetY();
+
+        // 计算点到线段的距离
+        double A = point.x - x1;
+        double B = point.y - y1;
+        double C = x2 - x1;
+        double D = y2 - y1;
+
+        double dot = A * C + B * D;
+        double len_sq = C * C + D * D;
+        double param = (len_sq != 0) ? dot / len_sq : -1;
+
+        double xx, yy;
+
+        if (param < 0) {
+            xx = x1;
+            yy = y1;
+        }
+        else if (param > 1) {
+            xx = x2;
+            yy = y2;
+        }
+        else {
+            xx = x1 + param * C;
+            yy = y1 + param * D;
+        }
+
+        double dx = point.x - xx;
+        double dy = point.y - yy;
+        return std::sqrt(dx * dx + dy * dy) < 5;
+    }
+
+    void Serialize(wxString& data) const {
+        data += wxString::Format("wire,%s,%s,",
+            startPin->GetId(), endPin->GetId());
+    }
+
+private:
+    Pin* startPin;
+    Pin* endPin;
+};
