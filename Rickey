@@ -1,4 +1,4 @@
-
+// 工具栏类
 class MainToolbar : public wxToolBar {
 public:
     MainToolbar(wxWindow* parent, CircuitCanvas* canvas) : wxToolBar(parent, wxID_ANY), canvas(canvas) {
@@ -7,20 +7,20 @@ public:
         AddTool(wxID_SAVE, "Save", wxArtProvider::GetBitmap(wxART_FILE_SAVE), "Save Circuit");
         AddSeparator();
 
-        AddTool(ID_SELECT, "Select", wxBitmap(wxT("mouse.png"),wxBITMAP_TYPE_PNG), "Select", wxITEM_RADIO);
+        AddTool(ID_SELECT, "Select", wxBitmap(wxT("images/mouse.png"),wxBITMAP_TYPE_PNG), "Select", wxITEM_RADIO);
         AddTool(ID_WIRE, "Wire", wxArtProvider::GetBitmap(wxART_PLUS), "Wire Tool", wxITEM_RADIO);
         AddSeparator();
 
-        AddTool(ID_AND, "AND", wxBitmap(wxT("AND.png"), wxBITMAP_TYPE_PNG), "AND Gate", wxITEM_RADIO);
-        AddTool(ID_OR, "OR", wxBitmap(wxT("OR.png"), wxBITMAP_TYPE_PNG), "OR Gate", wxITEM_RADIO);
-        AddTool(ID_NOT, "NOT", wxBitmap(wxT("NOT.png"), wxBITMAP_TYPE_PNG), "NOT Gate", wxITEM_RADIO);
-        AddTool(ID_XOR, "XOR", wxBitmap(wxT("XOR.png"), wxBITMAP_TYPE_PNG), "XOR Gate", wxITEM_RADIO);
-        AddTool(ID_NAND, "NAND", wxBitmap(wxT("NAND.png"), wxBITMAP_TYPE_PNG), "NAND Gate", wxITEM_RADIO);
-        AddTool(ID_NOR, "NOR", wxBitmap(wxT("NOR.png"), wxBITMAP_TYPE_PNG), "NOR Gate", wxITEM_RADIO);
+        AddTool(ID_AND, "AND", wxBitmap(wxT("images/AND.png"), wxBITMAP_TYPE_PNG), "AND Gate", wxITEM_RADIO);
+        AddTool(ID_OR, "OR", wxBitmap(wxT("images/OR.png"), wxBITMAP_TYPE_PNG), "OR Gate", wxITEM_RADIO);
+        AddTool(ID_NOT, "NOT", wxBitmap(wxT("images/NOT.png"), wxBITMAP_TYPE_PNG), "NOT Gate", wxITEM_RADIO);
+        AddTool(ID_XOR, "XOR", wxBitmap(wxT("images/XOR.png"), wxBITMAP_TYPE_PNG), "XOR Gate", wxITEM_RADIO);
+        AddTool(ID_NAND, "NAND", wxBitmap(wxT("images/NAND.png"), wxBITMAP_TYPE_PNG), "NAND Gate", wxITEM_RADIO);
+        AddTool(ID_NOR, "NOR", wxBitmap(wxT("images/NOR.png"), wxBITMAP_TYPE_PNG), "NOR Gate", wxITEM_RADIO);
         AddSeparator();
 
-        AddTool(ID_INPUT, "Input", wxBitmap(wxT("INPUT.png"), wxBITMAP_TYPE_PNG), "Input Pin", wxITEM_RADIO);
-        AddTool(ID_OUTPUT, "Output", wxBitmap(wxT("OUTPUT.png"), wxBITMAP_TYPE_PNG), "Output Pin", wxITEM_RADIO);
+        AddTool(ID_INPUT, "Input", wxBitmap(wxT("images/INPUT.png"), wxBITMAP_TYPE_PNG), "Input Pin", wxITEM_RADIO);
+        AddTool(ID_OUTPUT, "Output", wxBitmap(wxT("images/OUTPUT.png"), wxBITMAP_TYPE_PNG), "Output Pin", wxITEM_RADIO);
         AddSeparator();
 
         AddTool(ID_START_SIM, "Start", wxArtProvider::GetBitmap(wxART_GO_FORWARD), "Start Simulation");
@@ -56,7 +56,3 @@ public:
         ID_DELETE_ALL,
         ID_TRUTH_TABLE
     };
-
-private:
-    CircuitCanvas* canvas;
-};
