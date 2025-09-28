@@ -35,6 +35,7 @@ enum ElementType {
     TYPE_NOR,
     TYPE_WIRE,
     TYPE_SELECT, // 添加选择工具类型
+    TYPE_TOGGLE_VALUE, // 新增：显示真值工具
     ID_TOGGLE_TREE
 };
 
@@ -594,6 +595,7 @@ public:
         }
     }
 
+    // 修改 SetCurrentTool 方法
     void SetCurrentTool(ElementType tool) {
         currentTool = tool;
         wiringMode = (tool == TYPE_WIRE);
@@ -603,7 +605,13 @@ public:
             startPin = nullptr;
         }
 
-        SetCursor(wxCursor(wxCURSOR_ARROW));
+        // 设置合适的鼠标光标
+        if (tool == TYPE_TOGGLE_VALUE) {
+            SetCursor(wxCursor(wxCURSOR_HAND));
+        }
+        else {
+            SetCursor(wxCursor(wxCURSOR_ARROW));
+        }
         Refresh();
     }
 
@@ -959,27 +967,32 @@ private:
         pos.y /= zoomLevel;
         lastMousePos = pos;
 
-        // 首先检查是否点击了输入元件
-        if (TryToggleInputElement(pos)) {
-            Refresh();
-            return;
+        // 如果是显示真值工具模式，优先处理输入元件点击
+        if (currentTool == TYPE_TOGGLE_VALUE) {
+            if (TryToggleInputElement(pos)) {
+                Refresh();
+                return;
+            }
         }
 
-        // 原有的其他点击处理代码...
         if (autoPlaceMode) {
             // 自动放置模式：直接创建元件
             CreateElementAtPosition(autoPlaceType, pos);
             return;
         }
 
-        if (currentTool == TYPE_SELECT) {
+        if (currentTool == TYPE_SELECT || currentTool == TYPE_TOGGLE_VALUE) {
             selectedElement = nullptr;
             for (auto it = elements.rbegin(); it != elements.rend(); ++it) {
                 if ((*it)->GetBoundingBox().Contains(pos)) {
                     selectedElement = it->get();
                     (*it)->SetSelected(true);
-                    dragStartPos = pos;
-                    elementStartPos = wxPoint((*it)->GetX(), (*it)->GetY());
+
+                    // 只有在选择工具模式下才能拖动
+                    if (currentTool == TYPE_SELECT) {
+                        dragStartPos = pos;
+                        elementStartPos = wxPoint((*it)->GetX(), (*it)->GetY());
+                    }
                     break;
                 }
             }
@@ -1056,12 +1069,14 @@ private:
         }
     }
 
+    // 修改 OnMouseMove 方法，只在选择工具模式下允许拖动
     void OnMouseMove(wxMouseEvent& event) {
         wxPoint pos = event.GetPosition();
         pos.x /= zoomLevel;
         pos.y /= zoomLevel;
         lastMousePos = pos;
 
+        // 只有在选择工具模式下才能拖动元件
         if (event.Dragging() && selectedElement && currentTool == TYPE_SELECT) {
             int gridSize = 20;
             int x = elementStartPos.x + (pos.x - dragStartPos.x);
@@ -1083,6 +1098,7 @@ private:
             Refresh();
         }
     }
+
 
     void OnRightDown(wxMouseEvent& event) {
         wxPoint pos = event.GetPosition();
@@ -1182,6 +1198,7 @@ private:
     wxString GetToolName(ElementType tool) {
         switch (tool) {
         case TYPE_SELECT: return "Selection Tool";
+        case TYPE_TOGGLE_VALUE: return "Toggle Value Tool";
         case TYPE_AND: return "AND Gate";
         case TYPE_OR: return "OR Gate";
         case TYPE_NOT: return "NOT Gate";
@@ -1554,6 +1571,7 @@ private:
 class MainMenu : public wxMenuBar {
 public:
     MainMenu(CircuitCanvas* canvas) : canvas(canvas) {
+
         // 文件菜单
         wxMenu* fileMenu = new wxMenu();
         fileMenu->Append(wxID_NEW, "&New\tCtrl+N", "Create a new circuit");
@@ -1598,8 +1616,12 @@ public:
         viewMenu->Check(ID_SHOW_GRID, true);
         viewMenu->Append(ID_TOGGLE_GRID, "Toggle &Grid\tG", "Toggle grid display");
 
+  
         // 工具菜单
         wxMenu* toolsMenu = new wxMenu();
+        toolsMenu->AppendRadioItem(ID_TOOL_SELECT, "&Select Tool\tS", "Selection tool");
+        toolsMenu->AppendRadioItem(ID_TOOL_TOGGLE_VALUE, "Toggle &Value Tool\tV", "Toggle input values tool");
+        toolsMenu->AppendRadioItem(ID_TOOL_WIRE, "&Wire Tool\tW", "Wire connection tool");
         toolsMenu->AppendRadioItem(ID_TOOL_SELECT, "&Select Tool\tS", "Selection tool");
         toolsMenu->AppendRadioItem(ID_TOOL_WIRE, "&Wire Tool\tW", "Wire connection tool");
         toolsMenu->AppendSeparator();
@@ -1638,6 +1660,7 @@ public:
         ID_SHOW_GRID,
         ID_TOGGLE_GRID,
         ID_TOOL_SELECT,
+        ID_TOOL_TOGGLE_VALUE,  // 新增
         ID_TOOL_WIRE,
         ID_TOOL_AND,
         ID_TOOL_OR,
@@ -1659,40 +1682,52 @@ private:
 // 工具栏类
 class MainToolbar : public wxToolBar {
 public:
+    // 在 MainToolbar 类中添加新工具
     MainToolbar(wxWindow* parent, CircuitCanvas* canvas) : wxToolBar(parent, wxID_ANY), canvas(canvas) {
-
         AddTool(wxID_NEW, "New", wxArtProvider::GetBitmap(wxART_NEW), "New Circuit");
         AddTool(wxID_OPEN, "Open", wxArtProvider::GetBitmap(wxART_FILE_OPEN), "Open Circuit");
         AddTool(wxID_SAVE, "Save", wxArtProvider::GetBitmap(wxART_FILE_SAVE), "Save Circuit");
+   
+
         AddTool(ID_SELECT, "Select", wxBitmap(wxT("mouse.png"), wxBITMAP_TYPE_PNG), "Select", wxITEM_RADIO);
+        AddTool(ID_TOGGLE_VALUE, "Toggle Value", wxArtProvider::GetBitmap(wxART_TIP), "Toggle Value Tool", wxITEM_RADIO);
         AddTool(ID_WIRE, "Wire", wxArtProvider::GetBitmap(wxART_PLUS), "Wire Tool", wxITEM_RADIO);
+   
+
         AddTool(ID_AND, "AND", wxBitmap(wxT("AND.png"), wxBITMAP_TYPE_PNG), "AND Gate", wxITEM_RADIO);
         AddTool(ID_OR, "OR", wxBitmap(wxT("OR.png"), wxBITMAP_TYPE_PNG), "OR Gate", wxITEM_RADIO);
         AddTool(ID_NOT, "NOT", wxBitmap(wxT("NOT.png"), wxBITMAP_TYPE_PNG), "NOT Gate", wxITEM_RADIO);
         AddTool(ID_XOR, "XOR", wxBitmap(wxT("XOR.png"), wxBITMAP_TYPE_PNG), "XOR Gate", wxITEM_RADIO);
         AddTool(ID_NAND, "NAND", wxBitmap(wxT("NAND.png"), wxBITMAP_TYPE_PNG), "NAND Gate", wxITEM_RADIO);
         AddTool(ID_NOR, "NOR", wxBitmap(wxT("NOR.png"), wxBITMAP_TYPE_PNG), "NOR Gate", wxITEM_RADIO);
+
+
         AddTool(ID_INPUT, "Input", wxBitmap(wxT("INPUT.png"), wxBITMAP_TYPE_PNG), "Input Pin", wxITEM_RADIO);
         AddTool(ID_OUTPUT, "Output", wxBitmap(wxT("OUTPUT.png"), wxBITMAP_TYPE_PNG), "Output Pin", wxITEM_RADIO);
+
+
         AddTool(ID_START_SIM, "Start", wxArtProvider::GetBitmap(wxART_GO_FORWARD), "Start Simulation");
         AddTool(ID_STOP_SIM, "Stop", wxArtProvider::GetBitmap(wxART_STOP), "Stop Simulation");
         AddTool(ID_STEP, "Step", wxArtProvider::GetBitmap(wxART_GO_DOWN), "Single Step");
         AddTool(ID_TRUTH_TABLE, "Truth Table", wxArtProvider::GetBitmap(wxART_LIST_VIEW), "Show Truth Table");
+
+
         AddTool(ID_DELETE_ALL, "Delete All", wxArtProvider::GetBitmap(wxART_DELETE), "Delete All Elements");
 
-        // 在 MainToolbar 构造函数中添加删除按钮
+        // 添加删除按钮
         AddTool(wxID_DELETE, "Delete", wxArtProvider::GetBitmap(wxART_DELETE), "Delete Selected Element");
         Realize();
+        
 
-        // 设置默认工具
         ToggleTool(ID_SELECT, true);
-
         // 绑定事件
         Bind(wxEVT_TOOL, &MainToolbar::OnToolClicked, this);
     }
 
+    // 修改 MainToolbar 的枚举
     enum {
         ID_SELECT = MainMenu::ID_TRUTH_TABLE + 1,
+        ID_TOGGLE_VALUE,
         ID_WIRE,
         ID_AND,
         ID_OR,
@@ -1709,7 +1744,10 @@ public:
         ID_TRUTH_TABLE
     };
 
+    
+
 private:
+    // 修改 OnToolClicked 方法
     void OnToolClicked(wxCommandEvent& event) {
         int id = event.GetId();
         ElementType toolType = TYPE_SELECT;
@@ -1717,6 +1755,9 @@ private:
         switch (id) {
         case ID_SELECT:
             toolType = TYPE_SELECT;
+            break;
+        case ID_TOGGLE_VALUE:
+            toolType = TYPE_TOGGLE_VALUE;
             break;
         case ID_WIRE:
             toolType = TYPE_WIRE;
@@ -1752,7 +1793,7 @@ private:
         }
 
         // 设置自动放置模式（对于元件工具）
-        if (toolType != TYPE_SELECT && toolType != TYPE_WIRE) {
+        if (toolType != TYPE_SELECT && toolType != TYPE_WIRE && toolType != TYPE_TOGGLE_VALUE) {
             canvas->SetAutoPlaceMode(toolType);
         }
         else {
@@ -1838,7 +1879,11 @@ private:
         int id = event.GetId();
 
         switch (id) {
-
+            // 在 OnMenuEvent 方法中添加
+        case MainMenu::ID_TOOL_TOGGLE_VALUE:
+            canvas->SetCurrentTool(TYPE_TOGGLE_VALUE);
+            GetStatusBar()->SetStatusText("Toggle Value tool selected - click on input pins to change values");
+            break;
         case ID_TOGGLE_TREE:
             ToggleElementTree();
             break;
