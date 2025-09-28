@@ -1,0 +1,49 @@
+// 属性面板类
+class PropertiesPanel : public wxPanel {
+public:
+    PropertiesPanel(wxWindow* parent, CircuitCanvas* canvas)
+        : wxPanel(parent), canvas(canvas) {
+
+        wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+
+        pg = new wxPropertyGrid(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+            wxPG_DEFAULT_STYLE | wxPG_BOLD_MODIFIED);
+        sizer->Add(pg, 1, wxEXPAND);
+
+        SetSizer(sizer);
+
+        // 绑定事件
+        pg->Bind(wxEVT_PG_CHANGED, &PropertiesPanel::OnPropertyChanged, this);
+
+        canvas->Bind(wxEVT_LEFT_DOWN, &PropertiesPanel::OnCanvasSelectionChange, this);
+    }
+
+    void UpdateProperties() {
+        pg->Clear();
+
+        CircuitElement* selected = canvas->GetSelectedElement();
+        if (selected) {
+            selected->GetProperties(pg);
+        }
+        else {
+            pg->Append(new wxStringProperty("No Selection", "None", "Select an element to edit properties"));
+        }
+    }
+
+private:
+    void OnPropertyChanged(wxPropertyGridEvent& event) {
+        CircuitElement* selected = canvas->GetSelectedElement();
+        if (selected) {
+            selected->SetProperties(pg);
+            canvas->Refresh();
+        }
+    }
+
+    void OnCanvasSelectionChange(wxMouseEvent& event) {
+        UpdateProperties();
+        event.Skip();
+    }
+
+    wxPropertyGrid* pg;
+    CircuitCanvas* canvas;
+};
