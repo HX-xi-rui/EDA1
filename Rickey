@@ -1,1 +1,62 @@
 
+class MainToolbar : public wxToolBar {
+public:
+    MainToolbar(wxWindow* parent, CircuitCanvas* canvas) : wxToolBar(parent, wxID_ANY), canvas(canvas) {
+        AddTool(wxID_NEW, "New", wxArtProvider::GetBitmap(wxART_NEW), "New Circuit");
+        AddTool(wxID_OPEN, "Open", wxArtProvider::GetBitmap(wxART_FILE_OPEN), "Open Circuit");
+        AddTool(wxID_SAVE, "Save", wxArtProvider::GetBitmap(wxART_FILE_SAVE), "Save Circuit");
+        AddSeparator();
+
+        AddTool(ID_SELECT, "Select", wxBitmap(wxT("mouse.png"),wxBITMAP_TYPE_PNG), "Select", wxITEM_RADIO);
+        AddTool(ID_WIRE, "Wire", wxArtProvider::GetBitmap(wxART_PLUS), "Wire Tool", wxITEM_RADIO);
+        AddSeparator();
+
+        AddTool(ID_AND, "AND", wxBitmap(wxT("AND.png"), wxBITMAP_TYPE_PNG), "AND Gate", wxITEM_RADIO);
+        AddTool(ID_OR, "OR", wxBitmap(wxT("OR.png"), wxBITMAP_TYPE_PNG), "OR Gate", wxITEM_RADIO);
+        AddTool(ID_NOT, "NOT", wxBitmap(wxT("NOT.png"), wxBITMAP_TYPE_PNG), "NOT Gate", wxITEM_RADIO);
+        AddTool(ID_XOR, "XOR", wxBitmap(wxT("XOR.png"), wxBITMAP_TYPE_PNG), "XOR Gate", wxITEM_RADIO);
+        AddTool(ID_NAND, "NAND", wxBitmap(wxT("NAND.png"), wxBITMAP_TYPE_PNG), "NAND Gate", wxITEM_RADIO);
+        AddTool(ID_NOR, "NOR", wxBitmap(wxT("NOR.png"), wxBITMAP_TYPE_PNG), "NOR Gate", wxITEM_RADIO);
+        AddSeparator();
+
+        AddTool(ID_INPUT, "Input", wxBitmap(wxT("INPUT.png"), wxBITMAP_TYPE_PNG), "Input Pin", wxITEM_RADIO);
+        AddTool(ID_OUTPUT, "Output", wxBitmap(wxT("OUTPUT.png"), wxBITMAP_TYPE_PNG), "Output Pin", wxITEM_RADIO);
+        AddSeparator();
+
+        AddTool(ID_START_SIM, "Start", wxArtProvider::GetBitmap(wxART_GO_FORWARD), "Start Simulation");
+        AddTool(ID_STOP_SIM, "Stop", wxArtProvider::GetBitmap(wxART_STOP), "Stop Simulation");
+        AddTool(ID_STEP, "Step", wxArtProvider::GetBitmap(wxART_GO_DOWN), "Single Step");
+        AddSeparator();
+
+        AddTool(ID_TRUTH_TABLE, "Truth Table", wxArtProvider::GetBitmap(wxART_LIST_VIEW), "Show Truth Table");
+        AddTool(ID_DELETE_ALL, "Delete All", wxArtProvider::GetBitmap(wxART_DELETE), "Delete All Elements");
+
+        // 在 MainToolbar 构造函数中添加删除按钮
+        AddTool(wxID_DELETE, "Delete", wxArtProvider::GetBitmap(wxART_DELETE), "Delete Selected Element");
+        Realize();
+
+        // 设置默认工具
+        ToggleTool(ID_SELECT, true);
+    }
+
+    enum {
+        ID_SELECT = MainMenu::ID_TRUTH_TABLE + 1,
+        ID_WIRE,
+        ID_AND,
+        ID_OR,
+        ID_NOT,
+        ID_XOR,
+        ID_NAND,
+        ID_NOR,
+        ID_INPUT,
+        ID_OUTPUT,
+        ID_START_SIM,
+        ID_STOP_SIM,
+        ID_STEP,
+        ID_DELETE_ALL,
+        ID_TRUTH_TABLE
+    };
+
+private:
+    CircuitCanvas* canvas;
+};
