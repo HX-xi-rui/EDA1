@@ -67,6 +67,7 @@ public:
         }
     }
 
+    // 修改 SetCurrentTool 方法
     void SetCurrentTool(ElementType tool) {
         currentTool = tool;
         wiringMode = (tool == TYPE_WIRE);
@@ -76,7 +77,13 @@ public:
             startPin = nullptr;
         }
 
-        SetCursor(wxCursor(wxCURSOR_ARROW));
+        // 设置合适的鼠标光标
+        if (tool == TYPE_TOGGLE_VALUE) {
+            SetCursor(wxCursor(wxCURSOR_HAND));
+        }
+        else {
+            SetCursor(wxCursor(wxCURSOR_ARROW));
+        }
         Refresh();
     }
 
@@ -143,6 +150,19 @@ public:
 
     void StopSimulation() {
         simulating = false;
+
+        // 将所有输入元件的值设为0（false）
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_INPUT) {
+                InputOutput* input = dynamic_cast<InputOutput*>(element.get());
+                if (input) {
+                    input->SetValue(false);
+                }
+            }
+        }
+
+        // 更新电路状态以反映所有输入为0的情况
+        UpdateCircuit();
         Refresh();
     }
 
@@ -326,6 +346,7 @@ public:
     ElementType GetAutoPlaceType() const { return autoPlaceType; }
 
 private:
+    // 修改 OnPaint 方法，在输入元件上显示更明显的值指示
     void OnPaint(wxPaintEvent& event) {
         wxAutoBufferedPaintDC dc(this);
         dc.Clear();
@@ -353,6 +374,28 @@ private:
 
         for (auto& element : elements) {
             element->Draw(dc);
+        }
+
+        // 为输入元件添加点击提示
+        if (!simulating) {
+            dc.SetTextForeground(*wxBLUE);
+            wxFont smallFont = dc.GetFont();
+            smallFont.SetPointSize(7);
+            dc.SetFont(smallFont);
+
+            for (auto& element : elements) {
+                if (element->GetType() == TYPE_INPUT) {
+                    InputOutput* input = dynamic_cast<InputOutput*>(element.get());
+                    if (input) {
+                        wxRect bbox = element->GetBoundingBox();
+                        wxString hint = "(Click to toggle)";
+                        wxSize textSize = dc.GetTextExtent(hint);
+                        dc.DrawText(hint,
+                            bbox.GetLeft() + (bbox.GetWidth() - textSize.GetWidth()) / 2,
+                            bbox.GetBottom() + 5);
+                    }
+                }
+            }
         }
 
         if (wiringMode && startPin) {
@@ -409,23 +452,32 @@ private:
         pos.y /= zoomLevel;
         lastMousePos = pos;
 
+        // 如果是显示真值工具模式，优先处理输入元件点击
+        if (currentTool == TYPE_TOGGLE_VALUE) {
+            if (TryToggleInputElement(pos)) {
+                Refresh();
+                return;
+            }
+        }
+
         if (autoPlaceMode) {
             // 自动放置模式：直接创建元件
             CreateElementAtPosition(autoPlaceType, pos);
-
-            // 保持在自动放置模式，允许连续放置多个相同元件
-            // 如果用户想退出自动放置模式，可以按ESC键或选择其他工具
             return;
         }
 
-        if (currentTool == TYPE_SELECT) {
+        if (currentTool == TYPE_SELECT || currentTool == TYPE_TOGGLE_VALUE) {
             selectedElement = nullptr;
             for (auto it = elements.rbegin(); it != elements.rend(); ++it) {
                 if ((*it)->GetBoundingBox().Contains(pos)) {
                     selectedElement = it->get();
                     (*it)->SetSelected(true);
-                    dragStartPos = pos;
-                    elementStartPos = wxPoint((*it)->GetX(), (*it)->GetY());
+
+                    // 只有在选择工具模式下才能拖动
+                    if (currentTool == TYPE_SELECT) {
+                        dragStartPos = pos;
+                        elementStartPos = wxPoint((*it)->GetX(), (*it)->GetY());
+                    }
                     break;
                 }
             }
@@ -467,18 +519,49 @@ private:
         Refresh();
     }
 
+    // 新增方法：尝试切换输入元件的值
+    bool TryToggleInputElement(const wxPoint& pos) {
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_INPUT && element->GetBoundingBox().Contains(pos)) {
+                InputOutput* inputElement = dynamic_cast<InputOutput*>(element.get());
+                if (inputElement) {
+                    // 切换输入值（0变1，1变0）
+                    inputElement->SetValue(!inputElement->GetValue());
+
+                    // 更新电路状态
+                    UpdateCircuit();
+
+                    // 更新状态栏
+                    wxWindow* topWindow = wxGetTopLevelParent(this);
+                    if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
+                        wxFrame* frame = static_cast<wxFrame*>(topWindow);
+                        wxStatusBar* statusBar = frame->GetStatusBar();
+                        if (statusBar) {
+                            wxString state = inputElement->GetValue() ? "1" : "0";
+                            wxString name = inputElement->GetDisplayName();
+                            statusBar->SetStatusText(wxString::Format("%s toggled to %s", name, state));
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     void OnLeftUp(wxMouseEvent& event) {
         if (selectedElement) {
             selectedElement->SetSelected(false);
         }
     }
 
+    // 修改 OnMouseMove 方法，只在选择工具模式下允许拖动
     void OnMouseMove(wxMouseEvent& event) {
         wxPoint pos = event.GetPosition();
         pos.x /= zoomLevel;
         pos.y /= zoomLevel;
         lastMousePos = pos;
 
+        // 只有在选择工具模式下才能拖动元件
         if (event.Dragging() && selectedElement && currentTool == TYPE_SELECT) {
             int gridSize = 20;
             int x = elementStartPos.x + (pos.x - dragStartPos.x);
@@ -500,6 +583,7 @@ private:
             Refresh();
         }
     }
+
 
     void OnRightDown(wxMouseEvent& event) {
         wxPoint pos = event.GetPosition();
@@ -599,6 +683,7 @@ private:
     wxString GetToolName(ElementType tool) {
         switch (tool) {
         case TYPE_SELECT: return "Selection Tool";
+        case TYPE_TOGGLE_VALUE: return "Toggle Value Tool";
         case TYPE_AND: return "AND Gate";
         case TYPE_OR: return "OR Gate";
         case TYPE_NOT: return "NOT Gate";
