@@ -678,6 +678,19 @@ public:
 
     void StopSimulation() {
         simulating = false;
+
+        // 将所有输入元件的值设为0（false）
+        for (auto& element : elements) {
+            if (element->GetType() == TYPE_INPUT) {
+                InputOutput* input = dynamic_cast<InputOutput*>(element.get());
+                if (input) {
+                    input->SetValue(false);
+                }
+            }
+        }
+
+        // 更新电路状态以反映所有输入为0的情况
+        UpdateCircuit();
         Refresh();
     }
 
