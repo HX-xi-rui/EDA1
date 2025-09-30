@@ -1,5 +1,3 @@
-// 逻辑门基类
-// -------------------------- 逻辑门类（Gate）- 最终修复版 --------------------------
 class Gate : public CircuitElement {
 public:
     // 构造函数：调用基类构造，初始化引脚（复用基类SetPosition的引脚更新逻辑）
@@ -155,7 +153,7 @@ public:
                 outputPin.x + PIN_LENGTH, outputPin.y);
 
             // 反相小圆（右移至输出引脚末端，填充黑色）
-            dc.SetBrush(*wxBLACK_BRUSH);
+            dc.SetBrush(*wxRED_BRUSH);
             dc.DrawCircle(wxPoint(outputPin.x-8 + NOT_CIRCLE_RADIUS * 2, outputPin.y),
                 NOT_CIRCLE_RADIUS);
             dc.SetBrush(*wxWHITE_BRUSH); // 恢复画刷，避免影响后续元件
@@ -176,27 +174,38 @@ public:
             break;
         }
 
+
         case TYPE_NAND: {
-            // 与门主体+反相小圆：复用与门逻辑
+
+
+            // 梯形顶点：与AND门完全相同的计算逻辑，基于门中心posX/posY
             wxPoint nandPoints[] = {
-                wxPoint(posX - 40, posY - 15),
-                wxPoint(posX - 13, posY - 15),
-                wxPoint(posX, posY),
-                wxPoint(posX - 13, posY + 15),
-                wxPoint(posX - 40, posY + 15)
+                wxPoint(posX - GATE_WIDTH, posY - GATE_HEIGHT / 2),  // 左上顶点
+                wxPoint(posX - GATE_WIDTH / 3, posY - GATE_HEIGHT / 2), // 右上左顶点（梯形上斜边起点）
+                wxPoint(posX, posY),                                  // 右顶点（梯形斜边终点）
+                wxPoint(posX - GATE_WIDTH / 3, posY + GATE_HEIGHT / 2), // 右下左顶点（梯形下斜边起点）
+                wxPoint(posX - GATE_WIDTH, posY + GATE_HEIGHT / 2)   // 左下顶点
             };
-            dc.DrawPolygon(5, nandPoints);
+            dc.DrawPolygon(5, nandPoints); // 绘制与AND门相同的梯形主体
 
-            // 输出反相小圆：保存恢复画刷
-            wxBrush oldBrush = dc.GetBrush();
-            dc.DrawLine(posX, posY, posX + 4, posY);
-            dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(wxPoint(posX + 8, posY), 4);
-            dc.SetBrush(oldBrush);
+            // 输入引脚：与AND门输入引脚位置完全对齐
+            dc.DrawLine(posX - GATE_WIDTH, posY - GATE_HEIGHT / 4,  // 上输入引脚起点（梯形左侧上1/4处）
+                posX - GATE_WIDTH - PIN_LENGTH, posY - GATE_HEIGHT / 4); // 左延伸
+            dc.DrawLine(posX - GATE_WIDTH, posY + GATE_HEIGHT / 4,  // 下输入引脚起点（梯形左侧下1/4处）
+                posX - GATE_WIDTH - PIN_LENGTH, posY + GATE_HEIGHT / 4); // 左延伸
 
-            dc.DrawText("NAND", posX - 15, posY - 7);
+            // 输出引脚：与AND门输出引脚对齐，再添加反相小圆（NAND门特征）
+            dc.DrawLine(posX, posY, posX + PIN_LENGTH, posY); // 输出引脚（与AND门完全相同）
+            // 反相小圆：在输出引脚末端绘制，位置统一
+            dc.SetBrush(*wxRED_BRUSH);
+            dc.DrawCircle(wxPoint(posX + PIN_LENGTH + NOT_CIRCLE_RADIUS-12, posY), NOT_CIRCLE_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH); // 恢复画刷，避免影响后续元件
+
+            // 文字标签：与AND门标签位置对齐
+            dc.DrawText("NAND", posX - 39, posY - 7);
             break;
         }
+
 
         case TYPE_NOR: {
             // 或门主体+反相小圆：复用或门逻辑
@@ -240,12 +249,25 @@ public:
                     drawY -= 3;     // 向上偏移3像素，修正偏下
                 }
             }
+            if (this->type == TYPE_NAND) {
+                drawX -= 20;          // 保留原X轴偏移，解决偏右问题
+                // 区分上下输入引脚：上面引脚向下移，下面引脚向上移（偏移量可微调）
+                if (drawY < this->posY) { // 上面输入引脚（Y坐标小于门中心Y）
+                    drawY += 3;     // 向下偏移3像素，修正偏上
+                }
+                else if (drawY > this->posY) { // 下面输入引脚（Y坐标大于门中心Y）
+                    drawY -= 3;     // 向上偏移3像素，修正偏下
+                }
+            }
             dc.DrawCircle(drawX, drawY, 3);
         }
         // 输出引脚绘制：保持原AND门X轴偏移逻辑（若无需调整Y则不变）
         for (auto& pin : outputs) {
             int drawX = pin->GetX();
             if (this->type == TYPE_AND) {
+                drawX -= 20;
+            }
+            if (this->type == TYPE_NAND) {
                 drawX -= 20;
             }
             dc.DrawCircle(drawX, pin->GetY(), 3);
