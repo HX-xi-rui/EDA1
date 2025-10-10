@@ -1530,79 +1530,123 @@ public:
         Refresh();  // 刷新显示
     }
 
-    // 保存电路到文件
+    //保存电路图
     bool SaveCircuit(const wxString& filename) {
         wxFile file;
         if (file.Create(filename, true)) {
             wxString data;
 
-            // 序列化所有元件
+            // 保存所有元件
             for (auto& element : elements) {
                 element->Serialize(data);
                 data += "\n";
             }
 
-            // 序列化所有导线
+            // 保存所有导线 - 使用引脚坐标而不是指针
             for (auto& wire : wires) {
-                wire->Serialize(data);
-                data += "\n";
+                Pin* startPin = wire->GetStartPin();
+                Pin* endPin = wire->GetEndPin();
+
+                if (startPin && endPin) {
+                    // 保存起始引脚和结束引脚的坐标
+                    data += wxString::Format("WIRE,%d,%d,%d,%d\n",
+                        startPin->GetX(), startPin->GetY(),
+                        endPin->GetX(), endPin->GetY());
+                }
             }
 
-            file.Write(data);  // 写入文件
-            file.Close();      // 关闭文件
+            file.Write(data);
+            file.Close();
             return true;
         }
-        return false;  // 保存失败
+        return false;
     }
 
-    // 从文件加载电路
+    //加载电路图
     bool LoadCircuit(const wxString& filename) {
         wxFile file;
         if (file.Open(filename)) {
             wxString data;
-            file.ReadAll(&data);  // 读取所有数据
+            file.ReadAll(&data);
             file.Close();
 
-            Clear();  // 清空当前电路
+            Clear();
 
+            // 第一遍：加载所有元件
             wxStringTokenizer lines(data, "\n");
             while (lines.HasMoreTokens()) {
-                wxString line = lines.GetNextToken();
-                wxStringTokenizer tokens(line, ",");
+                wxString line = lines.GetNextToken().Trim();
+                if (line.empty()) continue;
 
+                wxStringTokenizer tokens(line, ",");
                 if (tokens.HasMoreTokens()) {
-                    wxString typeStr = tokens.GetNextToken();
-                    if (typeStr == "wire") {
-                        if (tokens.CountTokens() >= 2) {
-                            wxString startId = tokens.GetNextToken();
-                            wxString endId = tokens.GetNextToken();
-                            // 导线反序列化（需要引脚ID映射）
-                        }
+                    wxString firstToken = tokens.GetNextToken();
+
+                    if (firstToken == "WIRE") {
+                        // 导线在第二遍处理
+                        continue;
                     }
                     else {
                         long typeVal;
-                        typeStr.ToLong(&typeVal);
-                        ElementType type = static_cast<ElementType>(typeVal);
+                        if (firstToken.ToLong(&typeVal)) {
+                            ElementType type = static_cast<ElementType>(typeVal);
 
-                        // 根据类型创建相应元件
-                        if (type >= TYPE_AND && type <= TYPE_NOR) {
-                            auto gate = std::make_unique<Gate>(type, 0, 0);
-                            gate->Deserialize(line);
-                            elements.push_back(std::move(gate));
-                        }
-                        else if (type == TYPE_INPUT || type == TYPE_OUTPUT) {
-                            auto io = std::make_unique<InputOutput>(type, 0, 0);
-                            io->Deserialize(line);
-                            elements.push_back(std::move(io));
+                            if (type >= TYPE_AND && type <= TYPE_NOR) {
+                                auto gate = std::make_unique<Gate>(type, 0, 0);
+                                gate->Deserialize(line);
+                                elements.push_back(std::move(gate));
+                            }
+                            else if (type == TYPE_INPUT || type == TYPE_OUTPUT) {
+                                auto io = std::make_unique<InputOutput>(type, 0, 0);
+                                io->Deserialize(line);
+                                elements.push_back(std::move(io));
+                            }
                         }
                     }
                 }
             }
 
-            Refresh();  // 刷新显示
+            // 第二遍：重建导线连接
+            lines = wxStringTokenizer(data, "\n");
+            while (lines.HasMoreTokens()) {
+                wxString line = lines.GetNextToken().Trim();
+                if (line.empty()) continue;
+
+                wxStringTokenizer tokens(line, ",");
+                if (tokens.HasMoreTokens()) {
+                    wxString firstToken = tokens.GetNextToken();
+
+                    if (firstToken == "WIRE") {
+                        if (tokens.CountTokens() >= 4) {
+                            long startX, startY, endX, endY;
+                            tokens.GetNextToken().ToLong(&startX);
+                            tokens.GetNextToken().ToLong(&startY);
+                            tokens.GetNextToken().ToLong(&endX);
+                            tokens.GetNextToken().ToLong(&endY);
+
+                            // 通过坐标查找对应的引脚
+                            Pin* startPin = FindPinByPosition(startX, startY);
+                            Pin* endPin = FindPinByPosition(endX, endY);
+
+                            if (startPin && endPin && startPin->IsInput() != endPin->IsInput()) {
+                                // 确保连接方向正确：输出引脚 -> 输入引脚
+                                if (!startPin->IsInput() && endPin->IsInput()) {
+                                    wires.push_back(std::make_unique<Wire>(startPin, endPin));
+                                }
+                                else if (startPin->IsInput() && !endPin->IsInput()) {
+                                    wires.push_back(std::make_unique<Wire>(endPin, startPin));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            UpdateCircuit();
+            Refresh();
             return true;
         }
-        return false;  // 加载失败
+        return false;
     }
 
     // 切换网格显示
@@ -1690,6 +1734,24 @@ public:
     ElementType GetAutoPlaceType() const { return autoPlaceType; }
 
 private:
+    // 添加这个方法到 CircuitCanvas 的私有方法中
+    Pin* FindPinByPosition(int x, int y) {
+        // 允许一定的坐标容差
+        const int tolerance = 5;
+
+        for (auto& element : elements) {
+            for (auto pin : element->GetPins()) {
+                int pinX = pin->GetX();
+                int pinY = pin->GetY();
+
+                // 检查坐标是否匹配（考虑容差）
+                if (abs(pinX - x) <= tolerance && abs(pinY - y) <= tolerance) {
+                    return pin;
+                }
+            }
+        }
+        return nullptr;
+    }
     // 绘制事件处理
     void OnPaint(wxPaintEvent& event) {
         wxAutoBufferedPaintDC dc(this);  // 创建双缓冲绘图设备上下文
