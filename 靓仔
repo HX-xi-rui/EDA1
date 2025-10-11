@@ -256,7 +256,8 @@ public:
     }
 
     virtual void Serialize(wxString& data) const override {
-        data += wxString::Format("%d,%d,%d,", type, posX, posY);
+        // 只保存门的基本信息和指针
+        data += wxString::Format("%d,%d,%d,%p", type, posX, posY, this);
     }
 
     virtual void Deserialize(const wxString& data) override {
@@ -300,7 +301,7 @@ public:
         else {
             pins.push_back(std::make_unique<Pin>(x - 20, y, true, this)); // 输入引脚
         }
-    }                                                                                           
+    }
 
     // 修改 InputOutput 类的 Draw 方法，使输入元件的值显示更明显
     virtual void Draw(wxDC& dc) override {
@@ -410,7 +411,9 @@ public:
         if (nameToSave.empty()) {
             nameToSave = type == TYPE_INPUT ? "INPUT" : "OUTPUT";
         }
-        data += wxString::Format("%d,%d,%d,%d,%s", type, posX, posY, value ? 1 : 0, nameToSave);
+        // 保存完整信息，包括指针
+        data += wxString::Format("%d,%d,%d,%d,%s,%p",
+            type, posX, posY, value ? 1 : 0, nameToSave, this);
     }
 
     virtual void Deserialize(const wxString& data) override {
@@ -550,6 +553,7 @@ public:
         Bind(wxEVT_SIZE, &CircuitCanvas::OnSize, this);
         Bind(wxEVT_MENU, &CircuitCanvas::OnContextMenu, this);
         SetFocus();
+        OnCircuitModified();
     }
 
     // 新增：设置自动放置模式
@@ -585,6 +589,9 @@ public:
         else if (type == TYPE_INPUT || type == TYPE_OUTPUT) {
             elements.push_back(std::make_unique<InputOutput>(type, pos.x, pos.y));
         }
+
+        // 保存状态到撤销栈
+        OnCircuitModified();
         Refresh();
     }
 
@@ -650,6 +657,9 @@ public:
                 }
 
                 selectedElement = nullptr;
+
+                // 保存状态到撤销栈
+                OnCircuitModified();
                 Refresh();
             }
         }
@@ -730,11 +740,17 @@ public:
     }
 
     void Clear() {
+        bool hadContent = !elements.empty() || !wires.empty();
         elements.clear();
         wires.clear();
         selectedElement = nullptr;
         startPin = nullptr;
         autoPlaceMode = false;
+
+        if (hadContent) {
+            // 保存状态到撤销栈
+            OnCircuitModified();
+        }
         Refresh();
     }
 
@@ -777,6 +793,7 @@ public:
             file.Close();
 
             Clear();
+            ClearHistory(); // 清除历史记录
 
             // 第一遍：加载所有元件
             wxStringTokenizer lines(data, "\n");
@@ -850,6 +867,9 @@ public:
 
             UpdateCircuit();
             Refresh();
+
+            // 创建加载后的初始状态快照
+            OnCircuitModified();
             return true;
         }
         return false;
@@ -946,6 +966,295 @@ public:
     }
 
 private:
+        // 撤销/重做系统
+        std::vector<wxString> undoStack;
+        std::vector<wxString> redoStack;
+        const int MAX_HISTORY = 50;
+        bool isRestoringState = false;
+
+        // 保存当前状态到撤销栈
+        void SaveStateToUndoStack() {
+            if (isRestoringState) return;
+
+            wxString state = SerializeCircuit();
+            undoStack.push_back(state);
+
+            // 限制历史记录数量
+            if (undoStack.size() > MAX_HISTORY) {
+                undoStack.erase(undoStack.begin());
+            }
+
+            // 执行新操作后清空重做栈
+            redoStack.clear();
+
+            UpdateUndoRedoStatus();
+        }
+
+        // 序列化整个电路
+        wxString SerializeCircuit() {
+            wxString data;
+
+            //wxLogMessage("Serializing circuit: %zu elements, %zu wires", elements.size(), wires.size());
+
+            // 保存元件
+            data += "ELEMENTS\n";
+            for (auto& element : elements) {
+                wxString elemData;
+                element->Serialize(elemData);
+                data += elemData + "\n";
+                //wxLogMessage("Serialized element: %s", elemData);
+            }
+
+            // 保存导线
+            data += "WIRES\n";
+            for (auto& wire : wires) {
+                Pin* startPin = wire->GetStartPin();
+                Pin* endPin = wire->GetEndPin();
+
+                if (startPin && endPin) {
+                    CircuitElement* startParent = startPin->GetParent();
+                    CircuitElement* endParent = endPin->GetParent();
+
+                    wxString wireData = wxString::Format("WIRE,%p,%d,%p,%d",
+                        startParent, startPin->IsInput() ? 1 : 0,
+                        endParent, endPin->IsInput() ? 1 : 0);
+                    data += wireData + "\n";
+                    wxLogMessage("Serialized wire: %s", wireData);
+                }
+            }
+
+            return data;
+        }
+
+        // 从序列化数据恢复电路
+        void RestoreFromSerializedData(const wxString& data) {
+            isRestoringState = true;
+
+            // 清空当前电路
+            elements.clear();
+            wires.clear();
+            selectedElement = nullptr;
+            startPin = nullptr;
+
+            // 解析数据
+            wxStringTokenizer lines(data, "\n");
+            std::map<void*, CircuitElement*> elementMap;
+            bool readingElements = false;
+            bool readingWires = false;
+
+            while (lines.HasMoreTokens()) {
+                wxString line = lines.GetNextToken().Trim();
+
+                if (line == "ELEMENTS") {
+                    readingElements = true;
+                    readingWires = false;
+                    continue;
+                }
+                else if (line == "WIRES") {
+                    readingElements = false;
+                    readingWires = true;
+                    continue;
+                }
+
+                if (readingElements && !line.empty()) {
+                    CreateElementFromSerializedData(line, elementMap);
+                }
+                else if (readingWires && line.StartsWith("WIRE,")) {
+                    CreateWireFromSerializedData(line, elementMap);
+                }
+            }
+
+            UpdateCircuit();
+            isRestoringState = false;
+            Refresh();
+        }
+
+       // 从序列化数据创建元件
+        void CreateElementFromSerializedData(const wxString& data, std::map<void*, CircuitElement*>& elementMap) {
+            wxStringTokenizer tokens(data, ",");
+            if (tokens.CountTokens() >= 3) {
+                long typeVal, x, y;
+                tokens.GetNextToken().ToLong(&typeVal);
+                tokens.GetNextToken().ToLong(&x);
+                tokens.GetNextToken().ToLong(&y);
+
+                ElementType type = static_cast<ElementType>(typeVal);
+                std::unique_ptr<CircuitElement> newElement;
+
+                if (type >= TYPE_AND && type <= TYPE_NOR) {
+                    newElement = std::make_unique<Gate>(type, x, y);
+                }
+                else if (type == TYPE_INPUT || type == TYPE_OUTPUT) {
+                    newElement = std::make_unique<InputOutput>(type, x, y);
+
+                    // 处理输入输出的额外属性
+                    if (tokens.HasMoreTokens()) {
+                        long value;
+                        tokens.GetNextToken().ToLong(&value);
+                        if (InputOutput* io = dynamic_cast<InputOutput*>(newElement.get())) {
+                            io->SetValue(value != 0);
+                        }
+                        if (tokens.HasMoreTokens()) {
+                            wxString name = tokens.GetNextToken();
+                            if (InputOutput* io = dynamic_cast<InputOutput*>(newElement.get())) {
+                                io->SetName(name);
+                            }
+                        }
+                    }
+                }
+
+                if (newElement) {
+                    // 保存原始指针映射
+                    if (tokens.HasMoreTokens()) {
+                        wxString ptrStr = tokens.GetNextToken();
+                        void* originalPtr;
+                        sscanf(ptrStr.c_str(), "%p", &originalPtr);
+                        elementMap[originalPtr] = newElement.get();
+                    }
+
+                    elements.push_back(std::move(newElement));
+                }
+            }
+        }
+
+        // 从序列化数据创建导线
+        void CreateWireFromSerializedData(const wxString& data, std::map<void*, CircuitElement*>& elementMap) {
+            wxStringTokenizer tokens(data, ",");
+            tokens.GetNextToken(); // 跳过 "WIRE"
+
+            if (tokens.CountTokens() >= 4) {
+                wxString startPtrStr = tokens.GetNextToken();
+                wxString startIsInputStr = tokens.GetNextToken();
+                wxString endPtrStr = tokens.GetNextToken();
+                wxString endIsInputStr = tokens.GetNextToken();
+
+                void* startParentPtr, * endParentPtr;
+                int startIsInput, endIsInput;
+
+                sscanf(startPtrStr.c_str(), "%p", &startParentPtr);
+                sscanf(startIsInputStr.c_str(), "%d", &startIsInput);
+                sscanf(endPtrStr.c_str(), "%p", &endParentPtr);
+                sscanf(endIsInputStr.c_str(), "%d", &endIsInput);
+
+                // 查找对应的元件
+                if (elementMap.find(startParentPtr) != elementMap.end() &&
+                    elementMap.find(endParentPtr) != elementMap.end()) {
+
+                    CircuitElement* startElem = elementMap[startParentPtr];
+                    CircuitElement* endElem = elementMap[endParentPtr];
+
+                    // 查找对应的引脚
+                    Pin* startPin = FindPinByElementAndType(startElem, startIsInput == 1);
+                    Pin* endPin = FindPinByElementAndType(endElem, endIsInput == 1);
+
+                    if (startPin && endPin) {
+                        wires.push_back(std::make_unique<Wire>(startPin, endPin));
+                    }
+                }
+            }
+        }
+        // 通过元件和引脚类型查找引脚
+        Pin* FindPinByElementAndType(CircuitElement* element, bool isInput) {
+            if (!element) return nullptr;
+
+            auto pins = element->GetPins();
+            for (auto pin : pins) {
+                if (pin && pin->IsInput() == isInput) {
+                    return pin;
+                }
+            }
+            return nullptr;
+        }
+
+        // 更新撤销/重做按钮状态
+        void UpdateUndoRedoStatus() {
+            wxWindow* topWindow = wxGetTopLevelParent(this);
+            if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
+                wxFrame* frame = static_cast<wxFrame*>(topWindow);
+
+                if (wxMenuBar* menuBar = frame->GetMenuBar()) {
+                    menuBar->Enable(wxID_UNDO, CanUndo());
+                    menuBar->Enable(wxID_REDO, CanRedo());
+                }
+
+                if (wxToolBar* toolBar = frame->GetToolBar()) {
+                    toolBar->EnableTool(wxID_UNDO, CanUndo());
+                    toolBar->EnableTool(wxID_REDO, CanRedo());
+                }
+
+                // 更新状态栏信息
+                wxStatusBar* statusBar = frame->GetStatusBar();
+                if (statusBar) {
+                    wxString status = wxString::Format("Undo steps: %zu, Redo steps: %zu",
+                        undoStack.size(), redoStack.size());
+                    // 可以添加到状态栏的某个区域
+                }
+            }
+        }
+
+public:
+    // 公共撤销/重做接口
+    bool CanUndo() const { return !undoStack.empty(); }
+    bool CanRedo() const { return !redoStack.empty(); }
+
+    void Undo() {
+        if (!CanUndo()) return;
+
+        // 将当前状态保存到重做栈
+        wxString currentState = SerializeCircuit();
+        redoStack.push_back(currentState);
+
+        // 恢复到上一个状态
+        wxString prevState = undoStack.back();
+        undoStack.pop_back();
+        RestoreFromSerializedData(prevState);
+
+        UpdateUndoRedoStatus();
+
+        // 更新状态栏
+        wxWindow* topWindow = wxGetTopLevelParent(this);
+        if (topWindow) {
+            wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
+            if (statusBar) {
+                statusBar->SetStatusText("Undo performed");
+            }
+        }
+    }
+
+    void Redo() {
+        if (!CanRedo()) return;
+
+        // 将当前状态保存到撤销栈
+        wxString currentState = SerializeCircuit();
+        undoStack.push_back(currentState);
+
+        // 恢复到重做状态
+        wxString nextState = redoStack.back();
+        redoStack.pop_back();
+        RestoreFromSerializedData(nextState);
+
+        UpdateUndoRedoStatus();
+
+        // 更新状态栏
+        wxWindow* topWindow = wxGetTopLevelParent(this);
+        if (topWindow) {
+            wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
+            if (statusBar) {
+                statusBar->SetStatusText("Redo performed");
+            }
+        }
+    }
+
+    void ClearHistory() {
+        undoStack.clear();
+        redoStack.clear();
+        UpdateUndoRedoStatus();
+    }
+
+    // 在电路修改时调用
+    void OnCircuitModified() {
+        SaveStateToUndoStack();
+    }
     // 修改 OnPaint 方法，在输入元件上显示更明显的值指示
     void OnPaint(wxPaintEvent& event) {
         wxAutoBufferedPaintDC dc(this);
@@ -1103,6 +1412,9 @@ private:
                             wires.push_back(std::make_unique<Wire>(startPin, pin));
                         }
                         UpdateCircuit();
+
+                        // 保存状态到撤销栈
+                        OnCircuitModified();
                     }
                     startPin = nullptr;
                 }
@@ -1243,7 +1555,6 @@ private:
             break;
         case WXK_ESCAPE:
             if (autoPlaceMode) {
-                // 退出自动放置模式
                 autoPlaceMode = false;
                 SetCursor(wxCursor(wxCURSOR_ARROW));
                 Refresh();
@@ -1255,6 +1566,21 @@ private:
             break;
         case 'G':
             ToggleGrid();
+            break;
+        case 'Z':
+            if (event.ControlDown()) {
+                if (event.ShiftDown()) {
+                    Redo(); // Ctrl+Shift+Z 重做
+                }
+                else {
+                    Undo(); // Ctrl+Z 撤销
+                }
+            }
+            break;
+        case 'Y':
+            if (event.ControlDown()) {
+                Redo(); // Ctrl+Y 重做
+            }
             break;
         default:
             event.Skip();
@@ -1979,6 +2305,21 @@ private:
                 SetTitle("Logisim-like Circuit Simulator - New Circuit");
                 GetStatusBar()->SetStatusText("New circuit created");
                 propertiesPanel->UpdateProperties();
+            }
+            break;
+        case wxID_UNDO:
+            if (canvas->CanUndo()) {
+                canvas->Undo();
+                propertiesPanel->UpdateProperties();
+                GetStatusBar()->SetStatusText("Undo performed");
+            }
+            break;
+
+        case wxID_REDO:
+            if (canvas->CanRedo()) {
+                canvas->Redo();
+                propertiesPanel->UpdateProperties();
+                GetStatusBar()->SetStatusText("Redo performed");
             }
             break;
 
