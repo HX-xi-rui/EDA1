@@ -4641,10 +4641,15 @@ private:
         }
     }
 
+    // 确认保存（简化实现）
+    bool ConfirmSave() {
+        // 在实际应用中，这里应该检查电路是否已修改
+        return true;
+    }
 
     // 关闭窗口事件处理
     void OnClose(wxCloseEvent& event) {
-      
+        
         if (wxMessageBox("Are you sure you want to exit?", "Confirm Exit",
             wxYES_NO | wxICON_QUESTION, this) == wxYES) {
             Destroy();  // 销毁窗口
