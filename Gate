@@ -1,3 +1,4 @@
+// -------------------------- 逻辑门类（Gate）- 最终修复版 --------------------------
 class Gate : public CircuitElement {
 public:
     // 构造函数：调用基类构造，初始化引脚（复用基类SetPosition的引脚更新逻辑）
@@ -214,8 +215,65 @@ public:
 
         case TYPE_XOR: {
             // 圆角矩形+斜杠：与程序中简化风格统一
-            dc.DrawRoundedRectangle(posX - 20, posY - 15, 40, 30, 5);
-            dc.DrawLine(posX - 15, posY - 10, posX + 15, posY + 10); // 斜杠标识
+            // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
+            const int GATE_WIDTH = 40;    // 门水平总宽度
+            const int GATE_HEIGHT = 30;   // 门垂直总高度
+            const int PIN_LENGTH = 8;     // 引脚延伸长度
+            const int PIN_RADIUS = 2;     // 引脚衔接点半径
+
+            // 2. 计算椭圆扇形关键坐标（基于门中心posX/posY，确保居中）
+            wxPoint gateCenter(posX, posY);                      // 门中心（基准点）
+            int arcLeftX = posX - GATE_WIDTH / 2;                // 椭圆扇形左边界X
+            int arcTopY = posY - GATE_HEIGHT / 2;                // 椭圆扇形上边界Y
+            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
+
+            // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
+            dc.SetPen(*wxBLACK_PEN);
+            dc.SetBrush(*wxWHITE_BRUSH);
+            // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
+            auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
+                wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
+                double rx = rect.width / 2.0;  // 椭圆X轴半径
+                double ry = rect.height / 2.0; // 椭圆Y轴半径
+                std::vector<wxPoint> points;
+                points.push_back(center);  // 扇形中心点（确保闭合）
+
+                // 从endAngle向startAngle生成点（逆序），强制扇形开口方向朝左
+                for (int i = segments; i >= 0; i--) {
+                    double angleRad = startAngle + (endAngle - startAngle) * i / segments;
+                    // 关键修正：X轴坐标取反，直接反转水平方向，确保弧形在右侧、开口在左侧
+                    int x = center.x - rx * cos(angleRad);
+                    int y = center.y + ry * sin(angleRad);
+                    points.push_back(wxPoint(x, y));
+                }
+
+                // 绘制扇形多边形（自动闭合，最终形态为右侧弧形、左侧开口）
+                dc.DrawPolygon(static_cast<int>(points.size()), &points[0]);
+                };
+            // 角度参数：保持30°(M_PI/6)到330°(11*M_PI/6)，通过X轴取反实现开口朝左
+            DrawEllipticalSector(dc, arcRect, M_PI / 6, 11 * M_PI / 6);
+
+            // 4. 绘制输入引脚（左侧开口处，与扇形边缘精准衔接，符合左入逻辑）
+            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4); // 上输入引脚（左侧开口位置）
+            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4); // 下输入引脚（左侧开口位置）
+            // 上输入引脚：左延伸+衔接点（与开口边缘对齐，无偏移）
+            dc.DrawLine(upperInputPin.x - PIN_LENGTH, upperInputPin.y, upperInputPin.x, upperInputPin.y);
+            dc.SetBrush(*wxBLACK_BRUSH);
+            dc.DrawCircle(upperInputPin, PIN_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH);
+            // 下输入引脚：左延伸+衔接点
+            dc.DrawLine(lowerInputPin.x - PIN_LENGTH, lowerInputPin.y, lowerInputPin.x, lowerInputPin.y);
+            dc.SetBrush(*wxBLACK_BRUSH);
+            dc.DrawCircle(lowerInputPin, PIN_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH);
+
+            // 5. 绘制输出引脚（右侧弧形顶点，符合右出逻辑）
+            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY); // 输出引脚（右侧弧形顶点）
+            dc.DrawLine(outputPin.x, outputPin.y, outputPin.x + PIN_LENGTH, outputPin.y);
+            dc.SetBrush(*wxBLACK_BRUSH);
+            dc.DrawCircle(outputPin, PIN_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH);
+            dc.DrawLine(posX + 15, posY - 10, posX - 15, posY + 10); // 斜杠标识
             dc.DrawText("XOR", posX - 12, posY - 7);
             break;
         }
@@ -282,26 +340,94 @@ public:
         }
 
 
+
         case TYPE_NOR: {
-            // 或门主体+反相小圆：复用或门逻辑
-            dc.DrawLine(posX - GATE_WIDTH / 2, posY - GATE_HEIGHT / 2,
-                posX - GATE_WIDTH / 2, posY + GATE_HEIGHT / 2);
-            wxRect norArc(posX - GATE_WIDTH / 2, posY - GATE_HEIGHT / 2, GATE_WIDTH, GATE_HEIGHT);
-            int norArcCenterX = norArc.x + norArc.width / 2;
-            int norArcCenterY = norArc.y + norArc.height / 2;
-            dc.DrawArc(norArc.GetTopRight(), norArc.GetBottomRight(),
-                wxPoint(norArcCenterX, norArcCenterY));
+            // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
+            const int GATE_WIDTH = 40;    // 门水平总宽度
+            const int GATE_HEIGHT = 30;   // 门垂直总高度
+            const int PIN_LENGTH = 8;     // 引脚延伸长度
+            const int PIN_RADIUS = 2;     // 引脚衔接点半径
 
-            // 输出反相小圆：保存恢复画刷
-            wxBrush oldBrush = dc.GetBrush();
-            dc.DrawLine(posX + GATE_WIDTH / 2, posY, posX + GATE_WIDTH / 2 + 4, posY);
+            // 2. 计算椭圆扇形关键坐标（基于门中心posX/posY，确保居中）
+            wxPoint gateCenter(posX, posY);                      // 门中心（基准点）
+            int arcLeftX = posX - GATE_WIDTH / 2;                // 椭圆扇形左边界X
+            int arcTopY = posY - GATE_HEIGHT / 2;                // 椭圆扇形上边界Y
+            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
+
+            // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
+            dc.SetPen(*wxBLACK_PEN);
+            dc.SetBrush(*wxWHITE_BRUSH);
+            // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
+            auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
+                wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
+                double rx = rect.width / 2.0;  // 椭圆X轴半径
+                double ry = rect.height / 2.0; // 椭圆Y轴半径
+                std::vector<wxPoint> points;
+                points.push_back(center);  // 扇形中心点（确保闭合）
+
+                // 从endAngle向startAngle生成点（逆序），强制扇形开口方向朝左
+                for (int i = segments; i >= 0; i--) {
+                    double angleRad = startAngle + (endAngle - startAngle) * i / segments;
+                    // 关键修正：X轴坐标取反，直接反转水平方向，确保弧形在右侧、开口在左侧
+                    int x = center.x - rx * cos(angleRad);
+                    int y = center.y + ry * sin(angleRad);
+                    points.push_back(wxPoint(x, y));
+                }
+
+                // 绘制扇形多边形（自动闭合，最终形态为右侧弧形、左侧开口）
+                dc.DrawPolygon(static_cast<int>(points.size()), &points[0]);
+                };
+            // 角度参数：保持30°(M_PI/6)到330°(11*M_PI/6)，通过X轴取反实现开口朝左
+            DrawEllipticalSector(dc, arcRect, M_PI / 6, 11 * M_PI / 6);
+
+            // 4. 绘制输入引脚（左侧开口处，与扇形边缘精准衔接，符合左入逻辑）
+            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4); // 上输入引脚（左侧开口位置）
+            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4); // 下输入引脚（左侧开口位置）
+            // 上输入引脚：左延伸+衔接点（与开口边缘对齐，无偏移）
+            dc.DrawLine(upperInputPin.x - PIN_LENGTH, upperInputPin.y, upperInputPin.x, upperInputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(wxPoint(posX + GATE_WIDTH / 2 + 8, posY), 4);
-            dc.SetBrush(oldBrush);
+            dc.DrawCircle(upperInputPin, PIN_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH);
+            // 下输入引脚：左延伸+衔接点
+            dc.DrawLine(lowerInputPin.x - PIN_LENGTH, lowerInputPin.y, lowerInputPin.x, lowerInputPin.y);
+            dc.SetBrush(*wxBLACK_BRUSH);
+            dc.DrawCircle(lowerInputPin, PIN_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH);
 
+            // 5. 绘制输出引脚（右侧弧形顶点，符合右出逻辑）
+            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY); // 输出引脚（右侧弧形顶点）
+            dc.DrawLine(outputPin.x, outputPin.y, outputPin.x + PIN_LENGTH, outputPin.y);
+            dc.SetBrush(*wxBLACK_BRUSH);
+            dc.DrawCircle(outputPin, PIN_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH);
+
+            // 5. 绘制输出引脚+反相小圆（NOR门核心标识，位置与NAND门统一）
+            if (!outputs.empty()) {
+                // 输出引脚：右延伸（与OR门输出引脚长度一致）
+                dc.DrawLine(outputs[0]->GetX(), outputs[0]->GetY(),
+                    outputs[0]->GetX() + PIN_LENGTH, outputs[0]->GetY());
+
+                // 反相小圆：在输出引脚延伸端（避免遮挡门体，与NAND门反相圆位置对齐）
+                dc.SetBrush(*wxRED_BRUSH);
+                dc.DrawCircle(
+                    outputs[0]->GetX() + PIN_LENGTH + NOT_CIRCLE_RADIUS,  // 右移引脚长度+小圆半径
+                    outputs[0]->GetY(),
+                    NOT_CIRCLE_RADIUS
+                );
+                dc.SetBrush(*wxWHITE_BRUSH);
+
+                // 输出引脚圆点：视觉标识（与OR门一致）
+                dc.SetBrush(*wxBLACK_BRUSH);
+                dc.DrawCircle(outputs[0]->GetX(), outputs[0]->GetY(), PIN_RADIUS);
+                dc.SetBrush(*wxWHITE_BRUSH);
+            }
+
+            // 6. 绘制标签（位置与OR门对齐，确保整体视觉统一）
+            dc.SetTextForeground(*wxBLACK);
             dc.DrawText("NOR", posX - 12, posY - 7);
             break;
         }
+
 
         default:
             break;
@@ -316,6 +442,22 @@ public:
             int drawX = pin->GetX();
             int drawY = pin->GetY();
             if (this->type == TYPE_OR) {
+                if (drawY < this->posY) { // 上面输入引脚（Y坐标小于门中心Y）
+                    drawY += 3;     // 向下偏移3像素，修正偏上
+                }
+                else if (drawY > this->posY) { // 下面输入引脚（Y坐标大于门中心Y）
+                    drawY -= 3;     // 向上偏移3像素，修正偏下
+                }
+            }
+            if (this->type == TYPE_NOR) {
+                if (drawY < this->posY) { // 上面输入引脚（Y坐标小于门中心Y）
+                    drawY += 3;     // 向下偏移3像素，修正偏上
+                }
+                else if (drawY > this->posY) { // 下面输入引脚（Y坐标大于门中心Y）
+                    drawY -= 3;     // 向上偏移3像素，修正偏下
+                }
+            }
+            if (this->type == TYPE_XOR) {
                 if (drawY < this->posY) { // 上面输入引脚（Y坐标小于门中心Y）
                     drawY += 3;     // 向下偏移3像素，修正偏上
                 }
