@@ -1,0 +1,197 @@
+// 输入输出引脚类
+class InputOutput : public CircuitElement {
+public:
+    InputOutput(ElementType type, int x, int y, const wxString& name = "")
+        : CircuitElement(type, x, y), value(false), customName(name) {
+        if (type == TYPE_INPUT) {
+            pins.push_back(std::make_unique<Pin>(x + 20, y, false, this)); // 输出引脚
+        }
+        else {
+            pins.push_back(std::make_unique<Pin>(x - 20, y, true, this)); // 输入引脚
+        }
+    }
+
+
+
+    virtual void Draw(wxDC& dc) override {
+        dc.SetPen(selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1));
+        dc.SetBrush(value ? *wxGREEN_BRUSH : *wxWHITE_BRUSH);
+
+        // 1. 绘制带方向凹口的主体（逻辑不变）
+        const int BODY_SIZE = 30;
+        const int NOTCH_DEPTH = 6;
+        std::vector<wxPoint> bodyPoints;
+        if (type == TYPE_INPUT) {
+            bodyPoints = {
+                wxPoint(posX - BODY_SIZE / 2, posY - BODY_SIZE / 2),
+                wxPoint(posX + BODY_SIZE / 2, posY - BODY_SIZE / 2),
+                wxPoint(posX + BODY_SIZE / 2, posY + BODY_SIZE / 2),
+                wxPoint(posX - BODY_SIZE / 2, posY + BODY_SIZE / 2),
+                wxPoint(posX - BODY_SIZE / 2 + NOTCH_DEPTH, posY + BODY_SIZE / 4),
+                wxPoint(posX - BODY_SIZE / 2 + NOTCH_DEPTH, posY - BODY_SIZE / 4),
+                wxPoint(posX - BODY_SIZE / 2, posY - BODY_SIZE / 2)
+            };
+        }
+        else {
+            bodyPoints = {
+                wxPoint(posX - BODY_SIZE / 2, posY - BODY_SIZE / 2),
+                wxPoint(posX + BODY_SIZE / 2, posY - BODY_SIZE / 2),
+                wxPoint(posX + BODY_SIZE / 2 - NOTCH_DEPTH, posY - BODY_SIZE / 4),
+                wxPoint(posX + BODY_SIZE / 2 - NOTCH_DEPTH, posY + BODY_SIZE / 4),
+                wxPoint(posX + BODY_SIZE / 2, posY + BODY_SIZE / 2),
+                wxPoint(posX - BODY_SIZE / 2, posY + BODY_SIZE / 2),
+                wxPoint(posX - BODY_SIZE / 2, posY - BODY_SIZE / 2)
+            };
+        }
+        dc.DrawPolygon(static_cast<int>(bodyPoints.size()), &bodyPoints[0]);
+
+        // 2. 绘制方向箭头（逻辑不变）
+        dc.SetPen(*wxBLACK_PEN);
+        const int ARROW_LEN = 8;
+        const int ARROW_ANGLE = 3;
+        if (type == TYPE_INPUT) {
+            wxPoint arrowStart(posX - BODY_SIZE / 2 - ARROW_LEN, posY);
+            wxPoint arrowEnd(posX - BODY_SIZE / 2 + NOTCH_DEPTH, posY);
+            dc.DrawLine(arrowStart, arrowEnd);
+            dc.DrawLine(arrowEnd, wxPoint(arrowEnd.x - ARROW_ANGLE, arrowEnd.y - ARROW_ANGLE));
+            dc.DrawLine(arrowEnd, wxPoint(arrowEnd.x - ARROW_ANGLE, arrowEnd.y + ARROW_ANGLE));
+        }
+        else {
+            wxPoint arrowStart(posX + BODY_SIZE / 2 - NOTCH_DEPTH, posY);
+            wxPoint arrowEnd(posX + BODY_SIZE / 2 + ARROW_LEN, posY);
+            dc.DrawLine(arrowStart, arrowEnd);
+            dc.DrawLine(arrowEnd, wxPoint(arrowEnd.x - ARROW_ANGLE, arrowEnd.y - ARROW_ANGLE));
+            dc.DrawLine(arrowEnd, wxPoint(arrowEnd.x - ARROW_ANGLE, arrowEnd.y + ARROW_ANGLE));
+        }
+
+        // 3. 绘制标签（居中逻辑不变）
+        wxString label;
+        if (!customName.empty()) {
+            label = customName;
+        }
+        else if (type == TYPE_INPUT) {
+            label = "IN";
+        }
+        else {
+            label = "OUT";
+        }
+        wxSize labelSize = dc.GetTextExtent(label);
+        int horizontalOffset = type == TYPE_INPUT ? 3 : -3; // 微调偏移
+        dc.DrawText(label, posX - labelSize.GetWidth() / 2 + horizontalOffset, posY - BODY_SIZE / 4);
+
+
+        // -------------------------- 调整后：圆圈和数字整体下移25px --------------------------
+        dc.SetTextForeground(*wxRED);
+        wxString valueText = value ? "1" : "0";
+        wxSize textSize = dc.GetTextExtent(valueText);
+
+        const int CIRCLE_PADDING = 2;
+        int circleDiameter = std::max(textSize.GetWidth(), textSize.GetHeight()) + 2 * CIRCLE_PADDING;
+        int circleRadius = circleDiameter / 2;
+
+        // 核心修改：在原垂直中心基础上 +25px（整体下移25px）
+        wxPoint circleCenter(
+            posX - textSize.GetWidth() / 2, // 水平位置不变
+            // 原垂直中心：posY + BODY_SIZE/4 - textSize.GetHeight()/2 
+            // 新增下移：+25
+            posY + BODY_SIZE / 4 - textSize.GetHeight() / 2 + 27
+        );
+
+        // 1. 绘制圆形边框
+        dc.SetPen(*wxBLACK_PEN);
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+        dc.DrawCircle(circleCenter, circleRadius);
+
+        // 2. 绘制“0/1”文字（与圆形中心对齐，随圆形同步下移）
+        dc.DrawText(
+            valueText,
+            circleCenter.x - textSize.GetWidth() / 2,
+            circleCenter.y - textSize.GetHeight() / 2
+        );
+        // -------------------------------------------------------------------------------------
+
+
+        // 4. 绘制引脚（逻辑不变）
+        dc.SetPen(*wxBLACK_PEN);
+        dc.SetTextForeground(*wxBLACK);
+        for (auto& pin : pins) {
+            dc.DrawCircle(pin->GetX(), pin->GetY(), 3);
+        }
+    }
+
+
+
+    // 以下所有成员函数完全保留，无修改（确保功能兼容性）
+    virtual void Update() override { /* 输入输出元件不需要更新逻辑 */ }
+    void SetValue(bool val) { value = val; }
+    bool GetValue() const { return value; }
+    void SetName(const wxString& name) { customName = name; }
+    wxString GetCustomName() const { return customName; }
+
+    virtual std::vector<Pin*> GetPins() override {
+        std::vector<Pin*> pinPtrs;
+        for (auto& pin : pins) {
+            pinPtrs.push_back(pin.get());
+        }
+        return pinPtrs;
+    }
+
+    virtual wxRect GetBoundingBox() const override {
+        // 同步更新包围盒（包含箭头，确保选中区域准确）
+        const int BODY_SIZE = 30;
+        const int ARROW_LEN = 8;
+        if (type == TYPE_INPUT) {
+            return wxRect(posX - BODY_SIZE / 2 - ARROW_LEN, posY - BODY_SIZE / 2, BODY_SIZE + ARROW_LEN, BODY_SIZE);
+        }
+        else {
+            return wxRect(posX - BODY_SIZE / 2, posY - BODY_SIZE / 2, BODY_SIZE + ARROW_LEN, BODY_SIZE);
+        }
+    }
+
+    virtual wxString GetName() const override { return type == TYPE_INPUT ? "INPUT" : "OUTPUT"; }
+    virtual wxString GetDisplayName() const override {
+        if (!customName.empty()) return customName;
+        return type == TYPE_INPUT ? "Input Pin" : "Output Pin";
+    }
+
+    virtual void Serialize(wxString& data) const override {
+        data += wxString::Format("%d,%d,%d,%d,%s,", type, posX, posY, value ? 1 : 0, customName);
+    }
+
+    virtual void Deserialize(const wxString& data) override {
+        wxStringTokenizer tokenizer(data, ",");
+        if (tokenizer.CountTokens() >= 4) {
+            long typeVal, x, y, val;
+            tokenizer.GetNextToken().ToLong(&typeVal);
+            tokenizer.GetNextToken().ToLong(&x);
+            tokenizer.GetNextToken().ToLong(&y);
+            tokenizer.GetNextToken().ToLong(&val);
+            SetPosition(x, y);
+            value = val != 0;
+            if (tokenizer.HasMoreTokens()) customName = tokenizer.GetNextToken();
+        }
+    }
+
+    virtual void GetProperties(wxPropertyGrid* pg) const override {
+        pg->Append(new wxStringProperty("Type", "Type", GetDisplayName()));
+        pg->Append(new wxIntProperty("X Position", "X", posX));
+        pg->Append(new wxIntProperty("Y Position", "Y", posY));
+        pg->Append(new wxStringProperty("Name", "Name", customName));
+        pg->Append(new wxBoolProperty("Value", "Value", value));
+    }
+
+    virtual void SetProperties(wxPropertyGrid* pg) override {
+        wxVariant xVar = pg->GetPropertyValue("X");
+        wxVariant yVar = pg->GetPropertyValue("Y");
+        wxVariant nameVar = pg->GetPropertyValue("Name");
+        wxVariant valueVar = pg->GetPropertyValue("Value");
+        if (xVar.IsType("long") && yVar.IsType("long")) SetPosition(xVar.GetLong(), yVar.GetLong());
+        if (nameVar.IsType("string")) customName = nameVar.GetString();
+        if (valueVar.IsType("bool")) value = valueVar.GetBool();
+    }
+
+private:
+    std::vector<std::unique_ptr<Pin>> pins;
+    bool value;
+    wxString customName;
+};
