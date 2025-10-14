@@ -1,69 +1,88 @@
 // 导线类
 class Wire {
 public:
+    // 构造函数，接收起始引脚和结束引脚
     Wire(Pin* start, Pin* end) : startPin(start), endPin(end) {
+        // 建立双向连接：将导线对象设置到两个引脚中
         start->SetConnectedWire(this);
         end->SetConnectedWire(this);
     }
 
+    // 绘制导线
     void Draw(wxDC& dc) {
-        bool value = startPin->GetValue();
-        dc.SetPen(value ? wxPen(*wxGREEN, 2) : wxPen(*wxRED, 2));
+        // 根据信号值选择颜色：绿色=1（高电平），红色=0（低电平）
+        bool value = startPin->GetValue();  // 获取起始引脚的值
+        dc.SetPen(value ? wxPen(*wxGREEN, 2) : wxPen(*wxRED, 2));  // 设置画笔颜色和宽度
+        // 绘制从起始引脚到结束引脚的直线
         dc.DrawLine(startPin->GetX(), startPin->GetY(), endPin->GetX(), endPin->GetY());
     }
 
+    // 更新导线状态 - 传递信号值
     void Update() {
         // 将起始引脚的值传递到结束引脚
-        if (startPin && endPin) {
-            endPin->SetValue(startPin->GetValue());
+        if (startPin && endPin) {  // 确保两个引脚都存在
+            endPin->SetValue(startPin->GetValue());  // 传递信号值
         }
     }
 
+    // 获取起始引脚
     Pin* GetStartPin() const { return startPin; }
+    // 获取结束引脚
     Pin* GetEndPin() const { return endPin; }
 
+    // 检查点是否在导线附近（用于选择导线）
     bool ContainsPoint(const wxPoint& point) const {
-        if (!startPin || !endPin) return false;
+        if (!startPin || !endPin) return false;  // 如果引脚不存在返回false
 
+        // 获取两个引脚的坐标
         int x1 = startPin->GetX(), y1 = startPin->GetY();
         int x2 = endPin->GetX(), y2 = endPin->GetY();
 
-        // 计算点到线段的距离
-        double A = point.x - x1;
-        double B = point.y - y1;
-        double C = x2 - x1;
-        double D = y2 - y1;
+        // 计算点到线段的距离（使用向量投影方法）
+        double A = point.x - x1;  // 点到起点向量的x分量
+        double B = point.y - y1;  // 点到起点向量的y分量
+        double C = x2 - x1;       // 线段向量的x分量
+        double D = y2 - y1;       // 线段向量的y分量
 
-        double dot = A * C + B * D;
-        double len_sq = C * C + D * D;
-        double param = (len_sq != 0) ? dot / len_sq : -1;
+        // 计算点在线段上的投影参数
+        double dot = A * C + B * D;        // 点积
+        double len_sq = C * C + D * D;     // 线段长度的平方
+        double param = (len_sq != 0) ? dot / len_sq : -1;  // 投影参数，范围[0,1]表示在线段上
 
-        double xx, yy;
+        double xx, yy;  // 在线段上最近点的坐标
 
-        if (param < 0) {
+        // 根据投影参数确定最近点
+        if (param < 0) {        // 点在线段起点之前
             xx = x1;
             yy = y1;
         }
-        else if (param > 1) {
+        else if (param > 1) {   // 点在线段终点之后
             xx = x2;
             yy = y2;
         }
-        else {
+        else {                  // 点在线段上投影
             xx = x1 + param * C;
             yy = y1 + param * D;
         }
 
+        // 计算点到最近点的距离
         double dx = point.x - xx;
         double dy = point.y - yy;
+        // 如果距离小于5像素，则认为点在导线上
         return std::sqrt(dx * dx + dy * dy) < 5;
     }
 
+    // 序列化导线数据
     void Serialize(wxString& data) const {
-        data += wxString::Format("wire,%s,%s,",
-            startPin->GetId(), endPin->GetId());
+        if (startPin && endPin) {
+            // 使用引脚坐标而不是指针，避免指针失效问题
+            data += wxString::Format("WIRE,%d,%d,%d,%d,%d,%d",
+                startPin->GetX(), startPin->GetY(), startPin->IsInput() ? 1 : 0,
+                endPin->GetX(), endPin->GetY(), endPin->IsInput() ? 1 : 0);
+        }
     }
 
 private:
-    Pin* startPin;
-    Pin* endPin;
+    Pin* startPin;  // 起始引脚指针
+    Pin* endPin;    // 结束引脚指针
 };
