@@ -1943,6 +1943,7 @@ public:
     void CreateElementAtPosition(ElementType type, const wxPoint& pos) {
         std::unique_ptr<CircuitElement> newElement;
 
+        // 根据元件类型创建相应的元件对象
         if (type >= TYPE_AND && type <= TYPE_NOR) {  // 逻辑门元件
             newElement = std::make_unique<Gate>(type, pos.x, pos.y);
         }
@@ -1951,6 +1952,9 @@ public:
         }
         else if (type == TYPE_CLOCK) {  // 时钟元件
             newElement = std::make_unique<ClockElement>(pos.x, pos.y);
+        }
+        else if (type == TYPE_RS_FLIPFLOP) {  // RS触发器 - 新增
+            newElement = std::make_unique<RSFlipFlop>(pos.x, pos.y);
         }
         else if (type == TYPE_D_FLIPFLOP) {  // D触发器
             newElement = std::make_unique<DFlipFlop>(pos.x, pos.y);
@@ -1965,11 +1969,12 @@ public:
             newElement = std::make_unique<RegisterElement>(pos.x, pos.y);
         }
 
+        // 如果成功创建元件，将其添加到元件列表
         if (newElement) {
             CircuitElement* elementPtr = newElement.get();
             elements.push_back(std::move(newElement));
 
-            // 记录添加元件操作
+            // 记录添加元件操作（用于撤销/重做）
             if (!isRestoringState) {
                 wxString serializedData = SerializeElement(elementPtr);
                 auto operation = std::make_unique<AddElementOperation>(serializedData);
@@ -1984,7 +1989,7 @@ public:
                 UpdateUndoRedoStatus();
             }
 
-            Refresh();
+            Refresh();  // 刷新显示
         }
     }
 
@@ -2050,45 +2055,76 @@ public:
 
     // 删除选中元件
     void DeleteSelectedElement() {
-        if (selectedElement && !isRestoringState) {
-            wxMessageDialog dialog(GetParent(),
-                "Are you sure you want to delete the selected element?",
-                "Confirm Delete",
-                wxYES_NO | wxICON_QUESTION);
+        if (!selectedElement || isRestoringState) return;
 
-            if (dialog.ShowModal() == wxID_YES) {
-                // 序列化元件数据
-                wxString serializedData = SerializeElement(selectedElement);
+        // 显示确认对话框
+        wxMessageDialog dialog(GetParent(),
+            "Are you sure you want to delete the selected element?",
+            "Confirm Delete",
+            wxYES_NO | wxICON_QUESTION);
 
-                // 找到要删除的元件
-                std::unique_ptr<CircuitElement> elementToDelete;
-                auto it = std::find_if(elements.begin(), elements.end(),
-                    [this](const std::unique_ptr<CircuitElement>& elem) {
-                        return elem.get() == selectedElement;
-                    });
+        if (dialog.ShowModal() == wxID_YES) {
+            // 序列化元件数据用于撤销
+            wxString serializedData = SerializeElement(selectedElement);
 
-                if (it != elements.end()) {
-                    elementToDelete = std::move(*it);
+            // 找到要删除的元件
+            std::unique_ptr<CircuitElement> elementToDelete;
+            auto it = std::find_if(elements.begin(), elements.end(),
+                [this](const std::unique_ptr<CircuitElement>& elem) {
+                    return elem.get() == selectedElement;
+                });
 
-                    // 先记录删除操作
-                    auto operation = std::make_unique<DeleteElementOperation>(
-                        std::move(elementToDelete), serializedData);
-                    undoStack.push_back(std::move(operation));
-
-                    // 限制历史记录数量
-                    if (undoStack.size() > MAX_HISTORY) {
-                        undoStack.erase(undoStack.begin());
+            if (it != elements.end()) {
+                // 先断开所有引脚连接
+                auto pins = selectedElement->GetPins();
+                for (auto pin : pins) {
+                    // 找到并删除连接到该引脚的所有导线
+                    for (auto wireIt = wires.begin(); wireIt != wires.end(); ) {
+                        if ((*wireIt)->GetStartPin() == pin || (*wireIt)->GetEndPin() == pin) {
+                            // 记录导线删除操作（如果需要撤销）
+                            wireIt = wires.erase(wireIt);
+                        }
+                        else {
+                            ++wireIt;
+                        }
                     }
-
-                    redoStack.clear();
-                    UpdateUndoRedoStatus();
-
-                    // 然后实际删除
-                    RemoveElementWithoutHistory(selectedElement);
+                    // 清除引脚的连接
+                    pin->SetConnectedWire(nullptr);
                 }
 
+                // 保存要删除的元件
+                elementToDelete = std::move(*it);
+
+                // 记录删除操作到撤销栈
+                auto operation = std::make_unique<DeleteElementOperation>(
+                    std::move(elementToDelete), serializedData);
+
+                // 限制历史记录数量
+                if (undoStack.size() >= MAX_HISTORY) {
+                    undoStack.erase(undoStack.begin());
+                }
+                undoStack.push_back(std::move(operation));
+                redoStack.clear();
+                UpdateUndoRedoStatus();
+
+                // 从元素列表中移除
+                elements.erase(it);
+
+                // 清除选中状态
                 selectedElement = nullptr;
+
+                // 更新电路状态
+                UpdateCircuit();
                 Refresh();
+
+                // 更新状态栏
+                wxWindow* topWindow = wxGetTopLevelParent(this);
+                if (topWindow) {
+                    wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
+                    if (statusBar) {
+                        statusBar->SetStatusText("Element deleted");
+                    }
+                }
             }
         }
     }
@@ -2191,7 +2227,7 @@ public:
         Refresh();  // 刷新显示
     }
 
-    //保存电路图
+    // 保存电路图
     bool SaveCircuit(const wxString& filename) {
         wxFile file;
         if (file.Create(filename, true)) {
@@ -2223,7 +2259,7 @@ public:
         return false;
     }
 
-    //加载电路图
+    // 加载电路图
     bool LoadCircuit(const wxString& filename) {
         wxFile file;
         if (file.Open(filename)) {
@@ -2231,7 +2267,7 @@ public:
             file.ReadAll(&data);
             file.Close();
 
-            Clear();
+            Clear();  // 清空当前画布
 
             // 第一遍：加载所有元件
             wxStringTokenizer lines(data, "\n");
@@ -2252,6 +2288,7 @@ public:
                         if (firstToken.ToLong(&typeVal)) {
                             ElementType type = static_cast<ElementType>(typeVal);
 
+                            // 根据类型创建相应的元件
                             if (type >= TYPE_AND && type <= TYPE_NOR) {
                                 auto gate = std::make_unique<Gate>(type, 0, 0);
                                 gate->Deserialize(line);
@@ -2477,17 +2514,19 @@ private:
         OP_CHANGE_VALUE
     };
 
+    // 操作基类，定义撤销/重做接口
     class Operation {
     public:
         Operation(OperationType type) : type(type) {}
         virtual ~Operation() {}
-        virtual void Execute(CircuitCanvas* canvas) = 0;
-        virtual void Undo(CircuitCanvas* canvas) = 0;
+        virtual void Execute(CircuitCanvas* canvas) = 0;  // 执行操作
+        virtual void Undo(CircuitCanvas* canvas) = 0;     // 撤销操作
         OperationType GetType() const { return type; }
     private:
         OperationType type;
     };
 
+    // 添加元件操作
     class AddElementOperation : public Operation {
     public:
         AddElementOperation(const wxString& serializedData)
@@ -2510,6 +2549,7 @@ private:
         wxString serializedData;
     };
 
+    // 添加导线操作
     class AddWireOperation : public Operation {
     public:
         AddWireOperation(const wxString& serializedData)
@@ -2532,6 +2572,7 @@ private:
         wxString serializedData;
     };
 
+    // 删除元件操作
     class DeleteElementOperation : public Operation {
     public:
         DeleteElementOperation(std::unique_ptr<CircuitElement> element, const wxString& serializedData)
@@ -2555,6 +2596,7 @@ private:
         wxString serializedData;
     };
 
+    // 删除导线操作
     class DeleteWireOperation : public Operation {
     public:
         DeleteWireOperation(std::unique_ptr<Wire> wire, const wxString& serializedData)
@@ -2579,53 +2621,74 @@ private:
     };
 
     // === 撤销/重做系统 ===
-    std::vector<std::unique_ptr<Operation>> undoStack;
-    std::vector<std::unique_ptr<Operation>> redoStack;
-    const int MAX_HISTORY = 50;
-    bool isRestoringState;
+    std::vector<std::unique_ptr<Operation>> undoStack;  // 撤销栈
+    std::vector<std::unique_ptr<Operation>> redoStack;  // 重做栈
+    const int MAX_HISTORY = 50;  // 最大历史记录数量
+    bool isRestoringState;       // 是否正在恢复状态（防止递归记录操作）
 
     // === 序列化和反序列化方法 ===
+
+    // 序列化元件
     wxString SerializeElement(CircuitElement* element) {
         wxString data;
         element->Serialize(data);
         return data;
     }
 
+    // 序列化导线
     wxString SerializeWire(Wire* wire) {
         wxString data;
         wire->Serialize(data);
         return data;
     }
 
+    // 从序列化数据恢复元件
     void RestoreElementFromSerializedData(const wxString& data) {
         CreateElementFromSerializedData(data);
         UpdateCircuit();
         Refresh();
     }
 
+    // 从序列化数据恢复导线
     void RestoreWireFromSerializedData(const wxString& data) {
         CreateWireFromSerializedData(data);
         UpdateCircuit();
         Refresh();
     }
 
+    // 无历史记录地删除元件（用于撤销/重做系统内部使用）
     void RemoveElementWithoutHistory(CircuitElement* element) {
+        if (!element) return;
+
         isRestoringState = true;
 
-        // 删除与元件引脚相连的所有导线
+        // 安全地删除与元件引脚相连的所有导线
         auto pins = element->GetPins();
-        for (auto& pin : pins) {
-            for (auto wireIt = wires.begin(); wireIt != wires.end(); ) {
-                if ((*wireIt)->GetStartPin() == pin || (*wireIt)->GetEndPin() == pin) {
-                    wireIt = wires.erase(wireIt);
-                }
-                else {
-                    ++wireIt;
+        for (auto pin : pins) {
+            // 使用临时向量收集要删除的导线，避免迭代器失效
+            std::vector<Wire*> wiresToRemove;
+            for (auto& wire : wires) {
+                if (wire->GetStartPin() == pin || wire->GetEndPin() == pin) {
+                    wiresToRemove.push_back(wire.get());
                 }
             }
+
+            // 删除收集到的导线
+            for (auto wireToRemove : wiresToRemove) {
+                auto it = std::find_if(wires.begin(), wires.end(),
+                    [wireToRemove](const std::unique_ptr<Wire>& w) {
+                        return w.get() == wireToRemove;
+                    });
+                if (it != wires.end()) {
+                    wires.erase(it);
+                }
+            }
+
+            // 清除引脚连接
+            pin->SetConnectedWire(nullptr);
         }
 
-        // 删除元件
+        // 安全地删除元件
         auto it = std::find_if(elements.begin(), elements.end(),
             [element](const std::unique_ptr<CircuitElement>& elem) {
                 return elem.get() == element;
@@ -2635,6 +2698,7 @@ private:
             elements.erase(it);
         }
 
+        // 清除选中状态
         if (selectedElement == element) {
             selectedElement = nullptr;
         }
@@ -2644,6 +2708,7 @@ private:
         Refresh();
     }
 
+    // 无历史记录地删除导线
     void RemoveWireWithoutHistory(Wire* wire) {
         isRestoringState = true;
 
@@ -2661,6 +2726,7 @@ private:
         Refresh();
     }
 
+    // 完成导线连接
     void CompleteWireConnection(Pin* startPin, Pin* endPin) {
         if (startPin && endPin && startPin->IsInput() != endPin->IsInput()) {
             Pin* outputPin = startPin->IsInput() ? endPin : startPin;
@@ -2691,6 +2757,7 @@ private:
     }
 
     // === 原有的私有方法 ===
+
     // 从序列化数据创建元件
     void CreateElementFromSerializedData(const wxString& data) {
         wxStringTokenizer tokens(data, ",");
@@ -2703,6 +2770,7 @@ private:
             ElementType type = static_cast<ElementType>(typeVal);
             std::unique_ptr<CircuitElement> newElement;
 
+            // 根据类型创建相应的元件
             if (type >= TYPE_AND && type <= TYPE_NOR) {
                 newElement = std::make_unique<Gate>(type, x, y);
             }
@@ -2733,6 +2801,9 @@ private:
                         clock->SetFrequency(freq);
                     }
                 }
+            }
+            else if (type == TYPE_RS_FLIPFLOP) {  // 新增RS触发器
+                newElement = std::make_unique<RSFlipFlop>(x, y);
             }
             else if (type == TYPE_D_FLIPFLOP) {
                 newElement = std::make_unique<DFlipFlop>(x, y);
@@ -2789,7 +2860,7 @@ private:
 
     // 通过坐标查找引脚
     Pin* FindPinByPosition(int x, int y) {
-        const int tolerance = 5;
+        const int tolerance = 5;  // 容差范围
         for (auto& element : elements) {
             for (auto pin : element->GetPins()) {
                 int pinX = pin->GetX();
@@ -2819,21 +2890,21 @@ private:
     }
 
     // 原有的私有成员变量
-    ElementType currentTool;
-    bool wiringMode;
-    bool simulating;
-    bool showGrid;
-    double zoomLevel;
-    CircuitElement* selectedElement;
-    Pin* startPin;
-    wxPoint lastMousePos;
-    wxPoint dragStartPos;
-    wxPoint elementStartPos;
-    bool autoPlaceMode;
-    ElementType autoPlaceType;
-    wxSize virtualSize;
-    std::vector<std::unique_ptr<CircuitElement>> elements;
-    std::vector<std::unique_ptr<Wire>> wires;
+    ElementType currentTool;      // 当前工具类型
+    bool wiringMode;              // 是否处于连线模式
+    bool simulating;              // 是否正在仿真
+    bool showGrid;                // 是否显示网格
+    double zoomLevel;             // 缩放级别
+    CircuitElement* selectedElement;  // 当前选中的元件
+    Pin* startPin;                // 连线起始引脚
+    wxPoint lastMousePos;         // 最后鼠标位置
+    wxPoint dragStartPos;         // 拖动起始位置
+    wxPoint elementStartPos;      // 元件起始位置
+    bool autoPlaceMode;           // 自动放置模式
+    ElementType autoPlaceType;    // 自动放置类型
+    wxSize virtualSize;           // 虚拟画布大小
+    std::vector<std::unique_ptr<CircuitElement>> elements;  // 元件列表
+    std::vector<std::unique_ptr<Wire>> wires;               // 导线列表
 
     // 绘制事件处理
     void OnPaint(wxPaintEvent& event) {
@@ -2845,15 +2916,14 @@ private:
         dc.SetUserScale(zoomLevel, zoomLevel);  // 应用缩放
 
         // 获取可见区域（虚拟坐标）
-        int vx, vy;
-        GetViewStart(&vx, &vy);
-        vx *= 10; vy *= 10;  // 转换为虚拟坐标
-
+        wxPoint viewStart = GetViewStart();
         wxSize clientSize = GetClientSize();
-        int startX = vx;
-        int startY = vy;
-        int endX = vx + clientSize.x / zoomLevel;
-        int endY = vy + clientSize.y / zoomLevel;
+
+        // 正确的可见区域计算
+        int startX = viewStart.x * 10;  // 转换为虚拟坐标
+        int startY = viewStart.y * 10;
+        int endX = startX + clientSize.x / zoomLevel;
+        int endY = startY + clientSize.y / zoomLevel;
 
         // 绘制网格（只在可见区域绘制以提高性能）
         if (showGrid) {
@@ -2937,7 +3007,7 @@ private:
             dc.DrawText(toolText, 10, 10);
 
             // 显示当前视图位置和缩放信息
-            wxString viewInfo = wxString::Format("View: (%d,%d) Zoom: %.0f%%", vx, vy, zoomLevel * 100);
+            wxString viewInfo = wxString::Format("View: (%d,%d) Zoom: %.0f%%", startX, startY, zoomLevel * 100);
             dc.DrawText(viewInfo, 10, 30);
         }
         else {
@@ -3414,6 +3484,9 @@ public:
         wxTreeItemId clockItem = AppendItem(sequentialNode, "Clock");  // 时钟元件
         toolMap[clockItem] = TYPE_CLOCK;  // 映射到时钟类型
 
+        wxTreeItemId rsffItem = AppendItem(sequentialNode, "RS Flip-Flop");  // RS触发器
+        toolMap[rsffItem] = TYPE_RS_FLIPFLOP;  // 映射到RS触发器类型
+
         wxTreeItemId dffItem = AppendItem(sequentialNode, "D Flip-Flop");  // D触发器
         toolMap[dffItem] = TYPE_D_FLIPFLOP;  // 映射到D触发器类型
 
@@ -3853,11 +3926,12 @@ public:
         ID_TOOL_XOR,
         ID_TOOL_NAND,
         ID_TOOL_NOR,
-        ID_TOOL_CLOCK,        // 新增
-        ID_TOOL_D_FLIPFLOP,   // 新增
-        ID_TOOL_JK_FLIPFLOP,  // 新增
-        ID_TOOL_T_FLIPFLOP,   // 新增
-        ID_TOOL_REGISTER,     // 新增
+        ID_TOOL_CLOCK,       
+        ID_TOOL_RS_FLIPFLOP,
+        ID_TOOL_D_FLIPFLOP,   
+        ID_TOOL_JK_FLIPFLOP,  
+        ID_TOOL_T_FLIPFLOP,   
+        ID_TOOL_REGISTER,     
         ID_TOOL_INPUT,
         ID_TOOL_OUTPUT,
         ID_RENAME,
@@ -3921,11 +3995,12 @@ public:
         ID_XOR,
         ID_NAND,
         ID_NOR,
-        ID_CLOCK,           // 新增
-        ID_D_FLIPFLOP,      // 新增
-        ID_JK_FLIPFLOP,     // 新增
-        ID_T_FLIPFLOP,      // 新增
-        ID_REGISTER,        // 新增
+        ID_CLOCK,         
+        ID_TOOL_RS_FLIPFLOP,
+        ID_D_FLIPFLOP,     
+        ID_JK_FLIPFLOP,     
+        ID_T_FLIPFLOP,      
+        ID_REGISTER,        
         ID_INPUT,
         ID_OUTPUT,
         ID_START_SIM,
@@ -4281,6 +4356,11 @@ private:
             GetStatusBar()->SetStatusText("Clock tool selected");
             break;
 
+            // RS触发器工具
+        case MainMenu::ID_TOOL_RS_FLIPFLOP:
+            canvas->SetCurrentTool(TYPE_RS_FLIPFLOP);
+            GetStatusBar()->SetStatusText("RS Flip-Flop tool selected");
+            break;
             // D触发器工具
         case MainMenu::ID_TOOL_D_FLIPFLOP:
             canvas->SetCurrentTool(TYPE_D_FLIPFLOP);
@@ -4561,31 +4641,26 @@ private:
         }
     }
 
-    // 确认保存（简化实现）
-    bool ConfirmSave() {
-        // 在实际应用中，这里应该检查电路是否已修改
-        return true;
-    }
 
     // 关闭窗口事件处理
     void OnClose(wxCloseEvent& event) {
-        if (ConfirmSave()) {
-            if (wxMessageBox("Are you sure you want to exit?", "Confirm Exit",
-                wxYES_NO | wxICON_QUESTION, this) == wxYES) {
-                Destroy();  // 销毁窗口
-            }
-            else {
-                event.Veto();  // 阻止关闭
-            }
+      
+        if (wxMessageBox("Are you sure you want to exit?", "Confirm Exit",
+            wxYES_NO | wxICON_QUESTION, this) == wxYES) {
+            Destroy();  // 销毁窗口
+        }
+        else {
+            event.Veto();  // 阻止关闭
         }
     }
+    
 };
 
 // 应用程序类
 class MyApp : public wxApp {
 public:
     virtual bool OnInit() override {
-        wxInitAllImageHandlers();// 初始化wxWidgets的所有图像处理器
+        wxInitAllImageHandlers();
         MainFrame* frame = new MainFrame();
         frame->Show(true);
         return true;
