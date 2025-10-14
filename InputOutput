@@ -94,7 +94,7 @@ public:
             posX - textSize.GetWidth() / 2, // 水平位置不变
             // 原垂直中心：posY + BODY_SIZE/4 - textSize.GetHeight()/2 
             // 新增下移：+25
-            posY + BODY_SIZE / 4 - textSize.GetHeight() / 2 + 27
+            posY + BODY_SIZE / 4 - textSize.GetHeight() / 2 - 27
         );
 
         // 1. 绘制圆形边框
