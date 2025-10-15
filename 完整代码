@@ -1993,6 +1993,16 @@ public:
         }
     }
 
+    void NotifyStateChange() {
+        wxWindow* topWindow = wxGetTopLevelParent(this);
+        if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
+            wxFrame* frame = static_cast<wxFrame*>(topWindow);
+            if (wxToolBar* toolBar = frame->GetToolBar()) {
+                toolBar->EnableTool(wxID_UNDO, CanUndo());
+                toolBar->EnableTool(wxID_REDO, CanRedo());
+            }
+        }
+    }
     // 设置自动放置模式
     void SetAutoPlaceMode(ElementType type) {
         autoPlaceMode = (type != TYPE_SELECT && type != TYPE_WIRE);  // 非选择和连线工具时启用
@@ -2452,6 +2462,7 @@ public:
         isRestoringState = false;
         UpdateUndoRedoStatus();
         Refresh();
+        NotifyStateChange(); // 新增：通知状态改变
 
         // 更新状态栏
         wxWindow* topWindow = wxGetTopLevelParent(this);
@@ -2481,6 +2492,7 @@ public:
         isRestoringState = false;
         UpdateUndoRedoStatus();
         Refresh();
+        NotifyStateChange(); // 新增：通知状态改变
 
         // 更新状态栏
         wxWindow* topWindow = wxGetTopLevelParent(this);
@@ -3954,6 +3966,10 @@ public:
         AddTool(wxID_SAVE, "Save", wxArtProvider::GetBitmap(wxART_FILE_SAVE), "Save Circuit");
 
 
+        AddTool(wxID_UNDO, "Undo", wxArtProvider::GetBitmap(wxART_UNDO), "Undo (Ctrl+Z)");
+        AddTool(wxID_REDO, "Redo", wxArtProvider::GetBitmap(wxART_REDO), "Redo (Ctrl+Y)");
+
+
         AddTool(ID_SELECT, "Select", wxBitmap(wxT("mouse.png"), wxBITMAP_TYPE_PNG), "Select", wxITEM_RADIO);
         AddTool(ID_TOGGLE_VALUE, "Toggle Value", wxArtProvider::GetBitmap(wxART_TIP), "Toggle Value Tool", wxITEM_RADIO);
         AddTool(ID_WIRE, "Wire", wxArtProvider::GetBitmap(wxART_PLUS), "Wire Tool", wxITEM_RADIO);
@@ -3981,8 +3997,16 @@ public:
         Realize();
         ToggleTool(ID_SELECT, true);
 
+        // 初始时禁用撤销/重做按钮（因为没有操作历史）
+        EnableTool(wxID_UNDO, false);
+        EnableTool(wxID_REDO, false);
+
         // 绑定事件
         Bind(wxEVT_TOOL, &MainToolbar::OnToolClicked, this);
+
+        // 绑定更新UI事件来动态启用/禁用撤销重做按钮
+        Bind(wxEVT_UPDATE_UI, &MainToolbar::OnUpdateUI, this, wxID_UNDO);
+        Bind(wxEVT_UPDATE_UI, &MainToolbar::OnUpdateUI, this, wxID_REDO);
     }
 
     enum {
@@ -4083,7 +4107,20 @@ private:
             ToggleTool(toolId, toolId == id);
         }
     }
+    // 更新UI事件处理函数 - 用于动态启用/禁用撤销重做按钮
+    void OnUpdateUI(wxUpdateUIEvent& event) {
+        int id = event.GetId();
 
+        if (id == wxID_UNDO) {
+            event.Enable(canvas->CanUndo());
+        }
+        else if (id == wxID_REDO) {
+            event.Enable(canvas->CanRedo());
+        }
+        else {
+            event.Skip();
+        }
+    }
     CircuitCanvas* canvas;
 };
 
@@ -4491,6 +4528,21 @@ private:
         int id = event.GetId();
 
         switch (id) {
+        case wxID_UNDO:
+            if (canvas->CanUndo()) {
+                canvas->Undo();
+                propertiesPanel->UpdateProperties();
+                GetStatusBar()->SetStatusText("Undo performed");
+            }
+            break;
+
+        case wxID_REDO:
+            if (canvas->CanRedo()) {
+                canvas->Redo();
+                propertiesPanel->UpdateProperties();
+                GetStatusBar()->SetStatusText("Redo performed");
+            }
+            break;
         case MainToolbar::ID_SELECT:
             canvas->SetCurrentTool(TYPE_SELECT);
             GetStatusBar()->SetStatusText("Selection tool activated");
