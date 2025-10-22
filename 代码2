@@ -1051,6 +1051,10 @@ public:
 
 
         case TYPE_OR: {
+            wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
+            wxBrush fillBrush = *wxWHITE_BRUSH;
+            dc.SetPen(borderPen);
+            dc.SetBrush(fillBrush);
             // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
             const int GATE_WIDTH = 40;    // 门水平总宽度
             const int GATE_HEIGHT = 30;   // 门垂直总高度
@@ -1064,8 +1068,7 @@ public:
             wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
 
             // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
-            dc.SetPen(*wxBLACK_PEN);
-            dc.SetBrush(*wxWHITE_BRUSH);
+
             // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -1163,6 +1166,10 @@ public:
 
 
         case TYPE_XOR: {
+            wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
+            wxBrush fillBrush = *wxWHITE_BRUSH;
+            dc.SetPen(borderPen);
+            dc.SetBrush(fillBrush);
             // 圆角矩形+斜杠：与程序中简化风格统一
             // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
             const int GATE_WIDTH = 40;    // 门水平总宽度
@@ -1177,8 +1184,6 @@ public:
             wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
 
             // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
-            dc.SetPen(*wxBLACK_PEN);
-            dc.SetBrush(*wxWHITE_BRUSH);
             // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -1291,6 +1296,10 @@ public:
 
 
         case TYPE_NOR: {
+            wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
+            wxBrush fillBrush = *wxWHITE_BRUSH;
+            dc.SetPen(borderPen);
+            dc.SetBrush(fillBrush);
             // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
             const int GATE_WIDTH = 40;    // 门水平总宽度
             const int GATE_HEIGHT = 30;   // 门垂直总高度
@@ -1304,8 +1313,6 @@ public:
             wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
 
             // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
-            dc.SetPen(*wxBLACK_PEN);
-            dc.SetBrush(*wxWHITE_BRUSH);
             // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -1913,7 +1920,7 @@ public:
         startPin(nullptr), simulating(false), showGrid(true), zoomLevel(1.0),
         autoPlaceMode(false), autoPlaceType(TYPE_SELECT),
         virtualSize(2000, 2000), isRestoringState(false),
-        pasteOffset(0, 0), pasteCount(0) {  // 新增初始化
+        pasteOffset(0, 0), pasteCount(0), selectedWire(nullptr) {  // 新增初始化
 
         // 设置滚动条
         SetScrollRate(10, 10);  // 设置滚动步长
@@ -1939,7 +1946,36 @@ public:
 
         SetFocus();  // 设置焦点以接收键盘事件
     }
+    
+// 更新状态栏显示
+void UpdateStatusBar() {
+    wxWindow* topWindow = wxGetTopLevelParent(this);
+    if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
+        wxFrame* frame = static_cast<wxFrame*>(topWindow);
+        wxStatusBar* statusBar = frame->GetStatusBar();
+        if (statusBar) {
+            if (selectedElement) {
+                wxString connectionInfo = GetSelectedElementConnectionInfo();
+                statusBar->SetStatusText(connectionInfo, 0);
+            } else if (selectedWire) {
+                statusBar->SetStatusText("Wire selected - connects " + 
+                    GetPinInfo(selectedWire->GetStartPin()) + " to " + 
+                    GetPinInfo(selectedWire->GetEndPin()), 0);
+            } else {
+                statusBar->SetStatusText("Ready", 0);
+            }
+        }
+    }
+}
 
+// 辅助函数：获取引脚信息
+wxString GetPinInfo(Pin* pin) const {
+    if (!pin) return "Unknown";
+    CircuitElement* parent = pin->GetParent();
+    if (!parent) return "Orphan pin";
+    
+    return parent->GetDisplayName() + " (" + (pin->IsInput() ? "input" : "output") + ")";
+}
     void NotifyStateChange() {
         wxWindow* topWindow = wxGetTopLevelParent(this);
         if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
@@ -1961,6 +1997,116 @@ public:
             selectedElement->SetSelected(true);
         }
     }
+
+    // 删除选中的导线
+    void DeleteSelectedWire() {
+        if (!selectedWire || isRestoringState) return;
+
+        // 显示确认对话框
+        wxMessageDialog dialog(GetParent(),
+            "Are you sure you want to delete the selected wire?",
+            "Confirm Delete",
+            wxYES_NO | wxICON_QUESTION);
+
+        if (dialog.ShowModal() == wxID_YES) {
+            // 序列化导线数据用于撤销
+            wxString serializedData = SerializeWire(selectedWire);
+
+            // 找到要删除的导线
+            auto it = std::find_if(wires.begin(), wires.end(),
+                [this](const std::unique_ptr<Wire>& w) {
+                    return w.get() == selectedWire;
+                });
+
+            if (it != wires.end()) {
+                // 保存要删除的导线
+                std::unique_ptr<Wire> wireToDelete = std::move(*it);
+
+                // 记录删除操作到撤销栈
+                auto operation = std::make_unique<DeleteWireOperation>(
+                    std::move(wireToDelete), serializedData);
+
+                // 限制历史记录数量
+                if (undoStack.size() >= MAX_HISTORY) {
+                    undoStack.erase(undoStack.begin());
+                }
+                undoStack.push_back(std::move(operation));
+                redoStack.clear();
+                UpdateUndoRedoStatus();
+
+                // 从导线列表中移除
+                wires.erase(it);
+
+                // 清除选中状态
+                selectedWire = nullptr;
+
+                // 更新电路状态
+                UpdateCircuit();
+                Refresh();
+
+                // 更新状态栏
+                wxWindow* topWindow = wxGetTopLevelParent(this);
+                if (topWindow) {
+                    wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
+                    if (statusBar) {
+                        statusBar->SetStatusText("Wire deleted");
+                    }
+                }
+            }
+        }
+    }
+    wxString GetSelectedElementConnectionInfo() const {
+        if (!selectedElement) return "No element selected";
+
+        wxString info;
+        info << "Selected: " << selectedElement->GetDisplayName() << "\n";
+
+        // 获取所有引脚
+        auto pins = selectedElement->GetPins();
+
+        // 分析输入连接（上一个门）
+        info << "Previous gates: ";
+        bool hasPrevious = false;
+        for (auto pin : pins) {
+            if (pin->IsInput()) {
+                Wire* connectedWire = pin->GetConnectedWire();
+                if (connectedWire) {
+                    Pin* startPin = connectedWire->GetStartPin();
+                    if (startPin && startPin->GetParent() != selectedElement) {
+                        if (hasPrevious) info << ", ";
+                        info << startPin->GetParent()->GetDisplayName();
+                        hasPrevious = true;
+                    }
+                }
+            }
+        }
+        if (!hasPrevious) info << "None";
+
+        // 分析输出连接（下一个门）
+        info << "\nNext gates: ";
+        bool hasNext = false;
+        for (auto pin : pins) {
+            if (!pin->IsInput()) {
+                Wire* connectedWire = pin->GetConnectedWire();
+                if (connectedWire) {
+                    Pin* endPin = connectedWire->GetEndPin();
+                    if (endPin && endPin->GetParent() != selectedElement) {
+                        if (hasNext) info << ", ";
+                        info << endPin->GetParent()->GetDisplayName();
+                        hasNext = true;
+                    }
+                }
+            }
+        }
+        if (!hasNext) info << "None";
+
+        return info;
+    }
+    // 检查是否有选中的导线
+    bool HasSelectedWire() const { return selectedWire != nullptr; }
+
+    // 获取选中的导线
+    Wire* GetSelectedWire() const { return selectedWire; }
 
     // 删除所有选中的元件
     void DeleteAllSelectedElements() {
@@ -2055,85 +2201,6 @@ public:
         }
     }
 
-
-
-    //// 删除所有选中的元件
-    //void DeleteAllSelectedElements() {
-    //    if (isRestoringState) return;
-
-    //    // 收集要删除的元件（使用指针，避免迭代器失效）
-    //    std::vector<CircuitElement*> elementsToDelete;
-    //    for (auto& element : elements) {
-    //        if (element->IsSelected()) {
-    //            elementsToDelete.push_back(element.get());
-    //        }
-    //    }
-
-    //    // 删除收集到的元件
-    //    for (auto element : elementsToDelete) {
-    //        // 序列化元件数据用于撤销
-    //        wxString serializedData = SerializeElement(element);
-
-    //        // 找到要删除的元件
-    //        auto it = std::find_if(elements.begin(), elements.end(),
-    //            [element](const std::unique_ptr<CircuitElement>& elem) {
-    //                return elem.get() == element;
-    //            });
-
-    //        if (it != elements.end()) {
-    //            // 先断开所有引脚连接
-    //            auto pins = element->GetPins();
-    //            for (auto pin : pins) {
-    //                // 找到并删除连接到该引脚的所有导线
-    //                for (auto wireIt = wires.begin(); wireIt != wires.end(); ) {
-    //                    if ((*wireIt)->GetStartPin() == pin || (*wireIt)->GetEndPin() == pin) {
-    //                        wireIt = wires.erase(wireIt);
-    //                    }
-    //                    else {
-    //                        ++wireIt;
-    //                    }
-    //                }
-    //                // 清除引脚的连接
-    //                pin->SetConnectedWire(nullptr);
-    //            }
-
-    //            // 保存要删除的元件
-    //            std::unique_ptr<CircuitElement> elementToDelete = std::move(*it);
-
-    //            // 记录删除操作到撤销栈
-    //            auto operation = std::make_unique<DeleteElementOperation>(
-    //                std::move(elementToDelete), serializedData);
-
-    //            // 限制历史记录数量
-    //            if (undoStack.size() >= MAX_HISTORY) {
-    //                undoStack.erase(undoStack.begin());
-    //            }
-    //            undoStack.push_back(std::move(operation));
-
-    //            // 从元素列表中移除
-    //            elements.erase(it);
-    //        }
-    //    }
-
-    //    redoStack.clear();
-    //    UpdateUndoRedoStatus();
-
-    //    // 清除选中状态
-    //    selectedElement = nullptr;
-
-    //    // 更新电路状态
-    //    UpdateCircuit();
-    //    Refresh();
-
-    //    // 更新状态栏
-    //    wxWindow* topWindow = wxGetTopLevelParent(this);
-    //    if (topWindow) {
-    //        wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-    //        if (statusBar) {
-    //            statusBar->SetStatusText(wxString::Format("Deleted %zu selected elements", elementsToDelete.size()));
-    //        }
-    //    }
-    //}
 
 
     // 在指定位置创建元件，支持时序元件
@@ -2714,7 +2781,10 @@ public:
 
     void SelectAllElements() {
         for (auto& element : elements) {
-            element->SetSelected(true);
+            if (element->IsSelected())
+                element->SetSelected(false);
+            else
+                element->SetSelected(true);
         }
         selectedElement = nullptr;  // 清除单个选中
         Refresh();
@@ -2730,6 +2800,7 @@ public:
     }
 
     // 检查是否有选中的元件
+  // 检查是否有选中的元件（包括单个选中和多选）
     bool HasSelectedElements() const {
         for (auto& element : elements) {
             if (element->IsSelected()) {
@@ -2738,6 +2809,7 @@ public:
         }
         return false;
     }
+    bool HasOneSelectedElement()const { if (selectedElement) return true; }
 
     // 删除选中元件
     void DeleteSelectedElement() {
@@ -2798,6 +2870,9 @@ public:
 
                 // 清除选中状态
                 selectedElement = nullptr;
+
+                // 新增：更新状态栏清除显示
+                UpdateStatusBar();
 
                 // 更新电路状态
                 UpdateCircuit();
@@ -2905,7 +2980,9 @@ private:
         OP_CHANGE_VALUE
     };
 
+    
 
+   
 
     // 操作基类，定义撤销/重做接口
     class Operation {
@@ -3308,7 +3385,7 @@ private:
             }
         }
     }
-
+    Wire* selectedWire;                   // 当前选中的导线
     // 原有的私有成员变量
     ElementType currentTool;      // 当前工具类型
     bool wiringMode;              // 是否处于连线模式
@@ -3325,6 +3402,7 @@ private:
     wxSize virtualSize;           // 虚拟画布大小
     std::vector<std::unique_ptr<CircuitElement>> elements;  // 元件列表
     std::vector<std::unique_ptr<Wire>> wires;               // 导线列表
+
 
     // 绘制事件处理
     void OnPaint(wxPaintEvent& event) {
@@ -3365,7 +3443,21 @@ private:
 
         // 绘制所有导线
         for (auto& wire : wires) {
-            wire->Draw(dc);
+            // 如果是选中的导线，用不同颜色绘制
+            if (wire.get() == selectedWire) {
+                wxDC& dcRef = dc; // 创建引用以便在lambda中使用
+                bool value = wire->GetStartPin()->GetValue();
+
+                // 选中的导线用更粗的蓝色线绘制
+                dc.SetPen(value ? wxPen(*wxBLUE, 4) : wxPen(*wxBLUE, 4));
+                wire->Draw(dc);
+
+                // 恢复原来的颜色继续绘制
+                dc.SetPen(value ? wxPen(*wxGREEN, 2) : wxPen(*wxRED, 2));
+            }
+            else {
+                wire->Draw(dc);
+            }
         }
 
         // 绘制所有元件（只绘制在可见区域内的元件以提高性能）
@@ -3469,6 +3561,14 @@ private:
         pos.y /= zoomLevel;
         lastMousePos = pos;  // 记录鼠标位置
 
+        // 清除之前的选中状态
+        if (selectedElement) {
+            selectedElement->SetSelected(false);
+            selectedElement = nullptr;
+        }
+        if (selectedWire) {
+            selectedWire = nullptr;
+        }
         // 如果是显示真值工具模式，优先处理输入元件点击
         if (currentTool == TYPE_TOGGLE_VALUE) {
             if (TryToggleInputElement(pos)) {
@@ -3483,6 +3583,36 @@ private:
             return;
         }
 
+        if (currentTool == TYPE_SELECT) {
+            // 首先检查是否点击了导线
+            bool wireClicked = false;
+            for (auto& wire : wires) {
+                if (wire->ContainsPoint(pos)) {
+                    selectedWire = wire.get();
+                    wireClicked = true;
+                    break;
+                }
+            }
+
+            // 如果没有点击导线，再检查元件
+            if (!wireClicked) {
+                for (auto it = elements.rbegin(); it != elements.rend(); ++it) {
+                    if ((*it)->GetBoundingBox().Contains(pos)) {
+                        selectedElement = it->get();
+                        (*it)->SetSelected(true);
+
+                        if (currentTool == TYPE_SELECT) {
+                            dragStartPos = pos;
+                            elementStartPos = wxPoint((*it)->GetX(), (*it)->GetY());
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 新增：更新状态栏显示连接信息
+            UpdateStatusBar();
+        }
         if (currentTool == TYPE_SELECT || currentTool == TYPE_TOGGLE_VALUE) {
             selectedElement = nullptr;
             // 从后向前遍历（处理重叠元件）
@@ -3505,6 +3635,16 @@ private:
                 for (auto& element : elements) {
                     element->SetSelected(false);
                 }
+            }
+
+            // 新增：更新状态栏显示连接信息
+            UpdateStatusBar();
+        }
+
+        else if (currentTool == TYPE_TOGGLE_VALUE) {
+            if (TryToggleInputElement(pos)) {
+                Refresh();
+                return;
             }
         }
         // 在 OnLeftDown 方法中找到这个部分：
@@ -3618,6 +3758,11 @@ private:
                 wxString posInfo = wxString::Format("Position: (%d,%d)  View: (%d,%d)",
                     lastMousePos.x, lastMousePos.y, vx * 10, vy * 10);
                 statusBar->SetStatusText(posInfo, 1);  // 在第二个字段显示
+
+                // 新增：第三个字段显示当前工具信息
+                wxString toolInfo = GetToolName(currentTool);
+                if (autoPlaceMode) toolInfo += " - Auto Place";
+                statusBar->SetStatusText(toolInfo, 2);
             }
         }
     }
@@ -3625,58 +3770,71 @@ private:
     // 鼠标右键按下事件
     void OnRightDown(wxMouseEvent& event) {
         wxPoint pos = event.GetPosition();
-        CalcUnscrolledPosition(pos.x, pos.y, &pos.x, &pos.y);  // 转换为虚拟坐标
-
+        CalcUnscrolledPosition(pos.x, pos.y, &pos.x, &pos.y);
         pos.x /= zoomLevel;
         pos.y /= zoomLevel;
 
-        CircuitElement* clickedElement = nullptr;
-        // 查找点击的元件
-        for (auto& element : elements) {
-            if (element->GetBoundingBox().Contains(pos)) {
-                clickedElement = element.get();
+        // 清除之前的选中状态
+        if (selectedElement) {
+            selectedElement->SetSelected(false);
+            selectedElement = nullptr;
+        }
+        if (selectedWire) {
+            selectedWire = nullptr;
+        }
+
+        // 首先检查是否点击了导线
+        bool wireClicked = false;
+        for (auto& wire : wires) {
+            if (wire->ContainsPoint(pos)) {
+                selectedWire = wire.get();
+                wireClicked = true;
                 break;
             }
         }
 
-        if (clickedElement) {
-            // 设置选中元件
-            if (selectedElement) {
-                selectedElement->SetSelected(false);
+        // 如果没有点击导线，检查元件
+        CircuitElement* clickedElement = nullptr;
+        if (!wireClicked) {
+            for (auto& element : elements) {
+                if (element->GetBoundingBox().Contains(pos)) {
+                    clickedElement = element.get();
+                    selectedElement = clickedElement;
+                    selectedElement->SetSelected(true);
+                    break;
+                }
             }
-            selectedElement = clickedElement;
-            selectedElement->SetSelected(true);
 
-            // 创建上下文菜单
-            wxMenu contextMenu;
+            // 新增：更新状态栏显示连接信息
+            UpdateStatusBar();
+        }
+
+        // 创建上下文菜单
+        wxMenu contextMenu;
+
+        if (selectedWire) {
+            contextMenu.Append(wxID_DELETE, "Delete Wire");
+        }
+        else if (selectedElement) {
             contextMenu.Append(wxID_DELETE, "Delete Element");
             contextMenu.Append(wxID_PROPERTIES, "Properties");
-
-            // 绑定上下文菜单事件
-            contextMenu.Bind(wxEVT_MENU, [this](wxCommandEvent&) {
-                if (HasSelectedElements()) {
-                    DeleteAllSelectedElements();
-                }
-                }, wxID_DELETE);
-
-            PopupMenu(&contextMenu, event.GetPosition());  // 弹出菜单
-            Refresh();  // 刷新显示
         }
-        else {
-            // 检查是否点击了导线
-            for (auto& wire : wires) {
-                if (wire->ContainsPoint(pos)) {
-                    return;
-                }
-            }
 
-            // 点击空白处清除选中
-            if (selectedElement) {
-                selectedElement->SetSelected(false);
-                selectedElement = nullptr;
-                Refresh();  // 刷新显示
+        // 绑定上下文菜单事件
+        contextMenu.Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+            if (HasSelectedWire()) {
+                DeleteSelectedWire();
             }
+            else if (HasSelectedElements()) {
+                DeleteAllSelectedElements();
+            }
+            }, wxID_DELETE);
+
+        if (!contextMenu.GetMenuItems().empty()) {
+            PopupMenu(&contextMenu, event.GetPosition());
         }
+
+        Refresh();
     }
 
     // 鼠标滚轮事件
@@ -3704,8 +3862,12 @@ private:
 
         switch (event.GetKeyCode()) {
         case WXK_DELETE:
-            // 如果有选中的元件，删除所有选中的元件
-            if (HasSelectedElements()) {
+            // 优先删除选中的导线
+            if (HasSelectedWire()) {
+                DeleteSelectedWire();
+            }
+            // 然后删除选中的元件
+            else if (HasSelectedElements()) {
                 DeleteAllSelectedElements();
             }
             break;
@@ -4226,15 +4388,37 @@ public:
 
     // 更新属性面板内容
     void UpdateProperties() {
-        pg->Clear();  // 清空属性网格中的所有属性
+        pg->Clear();
 
-        CircuitElement* selected = canvas->GetSelectedElement();  // 获取画布中选中的元件
-        if (selected) {
-            selected->GetProperties(pg);  // 调用选中元件的GetProperties方法填充属性网格
+        if (canvas->HasSelectedWire()) {
+            // 显示导线信息
+            Wire* wire = canvas->GetSelectedWire();
+            if (wire) {
+                pg->Append(new wxStringProperty("Type", "Type", "Wire Connection"));
+                pg->Append(new wxStringProperty("Start Pin", "Start",
+                    wxString::Format("(%d, %d)",
+                        wire->GetStartPin()->GetX(),
+                        wire->GetStartPin()->GetY())));
+                pg->Append(new wxStringProperty("End Pin", "End",
+                    wxString::Format("(%d, %d)",
+                        wire->GetEndPin()->GetX(),
+                        wire->GetEndPin()->GetY())));
+                pg->Append(new wxBoolProperty("Signal Value", "Value",
+                    wire->GetStartPin()->GetValue()));
+            }
+            // 新增：更新状态栏
+            canvas->UpdateStatusBar();
+        }
+        else if (canvas->GetSelectedElement()) {
+            canvas->GetSelectedElement()->GetProperties(pg);
+            // 新增：更新状态栏
+            canvas->UpdateStatusBar();
         }
         else {
-            // 没有选中元件时显示提示信息
-            pg->Append(new wxStringProperty("No Selection", "None", "Select an element to edit properties"));
+            pg->Append(new wxStringProperty("No Selection", "None",
+                "Select an element or wire to edit properties"));
+            // 新增：更新状态栏
+            canvas->UpdateStatusBar();
         }
     }
 
@@ -4381,6 +4565,7 @@ public:
         ID_TOOL_OUTPUT,
         ID_RENAME,
         ID_DELETE_ALL,
+        ID_DELETE,
         ID_TRUTH_TABLE,
         ID_CENTER_VIEW,
         ID_FIT_TO_WINDOW
@@ -4425,7 +4610,8 @@ public:
 
 
         AddTool(ID_DELETE_ALL, "Delete All", wxArtProvider::GetBitmap(wxART_DELETE), "Delete All Elements");
-        AddTool(wxID_DELETE, "Delete", wxArtProvider::GetBitmap(wxART_DELETE), "Delete Selected Element");
+        AddTool(ID_DELETE, "Delete", wxArtProvider::GetBitmap(wxART_DELETE), "Delete Selected Element");
+
         Realize();
         ToggleTool(ID_SELECT, true);
 
@@ -4463,6 +4649,7 @@ public:
         ID_STOP_SIM,
         ID_STEP,
         ID_DELETE_ALL,
+        ID_DELETE,
         ID_TRUTH_TABLE,
         ID_TOGGLE_TREE
     };
@@ -4593,10 +4780,15 @@ public:
         toolBar = new MainToolbar(this, canvas);
         SetToolBar(toolBar);  // 设置工具栏
 
-        // 创建状态栏
-        CreateStatusBar(2);  // 创建两个字段的状态栏
-        GetStatusBar()->SetStatusText("Ready", 0);  // 设置初始状态文本
+        // 创建状态栏 - 修改为3个字段
+        CreateStatusBar(3);
+        GetStatusBar()->SetStatusText("Ready", 0);  // 第一个字段显示连接信息
         GetStatusBar()->SetStatusText("", 1);       // 第二个字段用于显示位置信息
+        GetStatusBar()->SetStatusText("", 2);       // 第三个字段用于显示工具信息
+
+        // 设置状态栏字段宽度
+        int widths[] = { 400, 200, -1 };  // 第一个字段显示连接信息，第二个字段显示位置，第三个字段自动扩展
+        GetStatusBar()->SetStatusWidths(3, widths);
 
         // 绑定事件
         Bind(wxEVT_MENU, &MainFrame::OnMenuEvent, this);        // 菜单事件
@@ -4891,6 +5083,34 @@ private:
             GetStatusBar()->SetStatusText("All elements deleted");
             break;
 
+            // 删除选择元件
+        case MainToolbar::ID_DELETE:
+            if (canvas->HasSelectedWire()) {
+                canvas->DeleteSelectedWire();
+            }
+            // 然后删除选中的单个元件
+            if (canvas->HasOneSelectedElement()) {
+                canvas->DeleteSelectedElement();
+            }
+            // 最后删除所有选中的元件（多选情况）
+            if (canvas->HasSelectedElements()) {
+                canvas->DeleteAllSelectedElements();
+            }
+            break;
+
+        case wxID_DELETE:
+            if (canvas->HasSelectedWire()) {
+                canvas->DeleteSelectedWire();
+            }
+            // 然后删除选中的单个元件
+            if (canvas->HasOneSelectedElement()) {
+                canvas->DeleteSelectedElement();
+            }
+            // 最后删除所有选中的元件（多选情况）
+            if (canvas->HasSelectedElements()) {
+                canvas->DeleteAllSelectedElements();
+            }
+            break;
             // 显示真值表
         case MainMenu::ID_TRUTH_TABLE:
             canvas->ShowTruthTable();
@@ -4949,13 +5169,7 @@ private:
                 "PageUp/PageDown - Fast scroll",
                 "Help", wxOK | wxICON_INFORMATION, this);
             break;
-        case wxID_DELETE:
-            // 删除所有选中的元件
-            if (canvas->HasSelectedElements()) {
-                canvas->DeleteAllSelectedElements();
-                GetStatusBar()->SetStatusText("Selected elements deleted");
-            }
-            break;
+
 
         default:
             event.Skip();  // 传递未处理的事件
@@ -5080,10 +5294,25 @@ private:
             GetStatusBar()->SetStatusText("All elements deleted");
             break;
 
+        case MainToolbar::ID_DELETE:
+            if (canvas->HasSelectedWire()) {
+                canvas->DeleteSelectedWire();
+            }
+            // 然后删除选中的单个元件
+            if (canvas->HasOneSelectedElement()) {
+                canvas->DeleteSelectedElement();
+            }
+            // 最后删除所有选中的元件（多选情况）
+            if (canvas->HasSelectedElements()) {
+                canvas->DeleteAllSelectedElements();
+            }
+            break;
+
         case MainToolbar::ID_TRUTH_TABLE:
             canvas->ShowTruthTable();
             GetStatusBar()->SetStatusText("Truth table displayed");
             break;
+
             // 剪切
         case wxID_CUT:
             if (canvas->HasSelectedElements()) {
@@ -5110,11 +5339,18 @@ private:
             canvas->SelectAllElements();
             GetStatusBar()->SetStatusText("Selected all elements");
             break;
+
         case wxID_DELETE:
-            // 删除所有选中的元件
+            if (canvas->HasSelectedWire()) {
+                canvas->DeleteSelectedWire();
+            }
+            // 然后删除选中的单个元件
+            if (canvas->HasOneSelectedElement()) {
+                canvas->DeleteSelectedElement();
+            }
+            // 最后删除所有选中的元件（多选情况）
             if (canvas->HasSelectedElements()) {
                 canvas->DeleteAllSelectedElements();
-                GetStatusBar()->SetStatusText("Selected elements deleted");
             }
             break;
 
