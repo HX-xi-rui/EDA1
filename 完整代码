@@ -1068,7 +1068,7 @@ public:
             wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
 
             // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
-     
+
             // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -1920,7 +1920,7 @@ public:
         startPin(nullptr), simulating(false), showGrid(true), zoomLevel(1.0),
         autoPlaceMode(false), autoPlaceType(TYPE_SELECT),
         virtualSize(2000, 2000), isRestoringState(false),
-        pasteOffset(0, 0), pasteCount(0), selectedWire(nullptr){  // 新增初始化
+        pasteOffset(0, 0), pasteCount(0), selectedWire(nullptr) {  // 新增初始化
 
         // 设置滚动条
         SetScrollRate(10, 10);  // 设置滚动步长
@@ -1947,6 +1947,37 @@ public:
         SetFocus();  // 设置焦点以接收键盘事件
     }
 
+    // 更新状态栏显示
+    void UpdateStatusBar() {
+        wxWindow* topWindow = wxGetTopLevelParent(this);
+        if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
+            wxFrame* frame = static_cast<wxFrame*>(topWindow);
+            wxStatusBar* statusBar = frame->GetStatusBar();
+            if (statusBar) {
+                if (selectedElement) {
+                    wxString connectionInfo = GetSelectedElementConnectionInfo();
+                    statusBar->SetStatusText(connectionInfo, 0);
+                }
+                else if (selectedWire) {
+                    statusBar->SetStatusText("Wire selected - connects " +
+                        GetPinInfo(selectedWire->GetStartPin()) + " to " +
+                        GetPinInfo(selectedWire->GetEndPin()), 0);
+                }
+                else {
+                    statusBar->SetStatusText("Ready", 0);
+                }
+            }
+        }
+    }
+
+    // 辅助函数：获取引脚信息
+    wxString GetPinInfo(Pin* pin) const {
+        if (!pin) return "Unknown";
+        CircuitElement* parent = pin->GetParent();
+        if (!parent) return "Orphan pin";
+
+        return parent->GetDisplayName() + " (" + (pin->IsInput() ? "input" : "output") + ")";
+    }
     void NotifyStateChange() {
         wxWindow* topWindow = wxGetTopLevelParent(this);
         if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
@@ -2026,7 +2057,53 @@ public:
             }
         }
     }
+    wxString GetSelectedElementConnectionInfo() const {
+        if (!selectedElement) return "No element selected";
 
+        wxString info;
+        info << "Selected: " << selectedElement->GetDisplayName() << "\n";
+
+        // 获取所有引脚
+        auto pins = selectedElement->GetPins();
+
+        // 分析输入连接（上一个门）
+        info << "Previous gates: ";
+        bool hasPrevious = false;
+        for (auto pin : pins) {
+            if (pin->IsInput()) {
+                Wire* connectedWire = pin->GetConnectedWire();
+                if (connectedWire) {
+                    Pin* startPin = connectedWire->GetStartPin();
+                    if (startPin && startPin->GetParent() != selectedElement) {
+                        if (hasPrevious) info << ", ";
+                        info << startPin->GetParent()->GetDisplayName();
+                        hasPrevious = true;
+                    }
+                }
+            }
+        }
+        if (!hasPrevious) info << "None";
+
+        // 分析输出连接（下一个门）
+        info << "\nNext gates: ";
+        bool hasNext = false;
+        for (auto pin : pins) {
+            if (!pin->IsInput()) {
+                Wire* connectedWire = pin->GetConnectedWire();
+                if (connectedWire) {
+                    Pin* endPin = connectedWire->GetEndPin();
+                    if (endPin && endPin->GetParent() != selectedElement) {
+                        if (hasNext) info << ", ";
+                        info << endPin->GetParent()->GetDisplayName();
+                        hasNext = true;
+                    }
+                }
+            }
+        }
+        if (!hasNext) info << "None";
+
+        return info;
+    }
     // 检查是否有选中的导线
     bool HasSelectedWire() const { return selectedWire != nullptr; }
 
@@ -2709,7 +2786,7 @@ public:
             if (element->IsSelected())
                 element->SetSelected(false);
             else
-            element->SetSelected(true);
+                element->SetSelected(true);
         }
         selectedElement = nullptr;  // 清除单个选中
         Refresh();
@@ -2734,7 +2811,7 @@ public:
         }
         return false;
     }
-    bool HasOneSelectedElement()const{ if (selectedElement) return true; }
+    bool HasOneSelectedElement()const { if (selectedElement) return true; }
 
     // 删除选中元件
     void DeleteSelectedElement() {
@@ -2795,6 +2872,9 @@ public:
 
                 // 清除选中状态
                 selectedElement = nullptr;
+
+                // 新增：更新状态栏清除显示
+                UpdateStatusBar();
 
                 // 更新电路状态
                 UpdateCircuit();
@@ -2901,6 +2981,8 @@ private:
         OP_MOVE_ELEMENT,
         OP_CHANGE_VALUE
     };
+
+
 
 
 
@@ -3529,6 +3611,9 @@ private:
                     }
                 }
             }
+
+            // 新增：更新状态栏显示连接信息
+            UpdateStatusBar();
         }
         if (currentTool == TYPE_SELECT || currentTool == TYPE_TOGGLE_VALUE) {
             selectedElement = nullptr;
@@ -3553,6 +3638,9 @@ private:
                     element->SetSelected(false);
                 }
             }
+
+            // 新增：更新状态栏显示连接信息
+            UpdateStatusBar();
         }
 
         else if (currentTool == TYPE_TOGGLE_VALUE) {
@@ -3672,6 +3760,11 @@ private:
                 wxString posInfo = wxString::Format("Position: (%d,%d)  View: (%d,%d)",
                     lastMousePos.x, lastMousePos.y, vx * 10, vy * 10);
                 statusBar->SetStatusText(posInfo, 1);  // 在第二个字段显示
+
+                // 新增：第三个字段显示当前工具信息
+                wxString toolInfo = GetToolName(currentTool);
+                if (autoPlaceMode) toolInfo += " - Auto Place";
+                statusBar->SetStatusText(toolInfo, 2);
             }
         }
     }
@@ -3713,6 +3806,9 @@ private:
                     break;
                 }
             }
+
+            // 新增：更新状态栏显示连接信息
+            UpdateStatusBar();
         }
 
         // 创建上下文菜单
@@ -4270,31 +4366,46 @@ void CircuitCanvas::ShowTruthTable() {
 }
 
 // 属性面板类
+// 属性面板类
 class PropertiesPanel : public wxPanel {
 public:
     // 构造函数，接收父窗口和电路画布指针
     PropertiesPanel(wxWindow* parent, CircuitCanvas* canvas)
-        : wxPanel(parent), canvas(canvas) {  // 初始化基类和画布指针
+        : wxPanel(parent), canvas(canvas) {
 
         // 创建垂直排列的布局管理器
-        wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+        wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
 
         // 创建属性网格控件
-        pg = new wxPropertyGrid(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-            wxPG_DEFAULT_STYLE | wxPG_BOLD_MODIFIED);  // 默认样式 + 修改项加粗
-        sizer->Add(pg, 1, wxEXPAND);  // 将属性网格添加到布局，1表示可扩展，wxEXPAND表示填充可用空间
+        pg = new wxPropertyGrid(this, wxID_ANY, wxDefaultPosition, wxSize(300, 200),
+            wxPG_DEFAULT_STYLE | wxPG_BOLD_MODIFIED);
+        mainSizer->Add(pg, 1, wxEXPAND);
 
-        SetSizer(sizer);  // 设置面板的布局管理器
+        // 创建连接信息文本框（只读，用于显示详细连接信息）
+        connectionInfoText = new wxTextCtrl(this, wxID_ANY, "",
+            wxDefaultPosition, wxDefaultSize,
+            wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH | wxTE_WORDWRAP);
+        connectionInfoText->SetMinSize(wxSize(300, 150));
+        connectionInfoText->SetBackgroundColour(wxColour(240, 240, 240)); // 浅灰色背景
+        connectionInfoText->SetFont(wxFont(10, wxFONTFAMILY_MODERN, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
+
+        mainSizer->Add(new wxStaticText(this, wxID_ANY, "Connection Information:"), 0, wxALL, 5);
+        mainSizer->Add(connectionInfoText, 0, wxEXPAND | wxALL, 5);
+
+        SetSizer(mainSizer);
 
         // 绑定事件
-        pg->Bind(wxEVT_PG_CHANGED, &PropertiesPanel::OnPropertyChanged, this);  // 属性改变事件
+        pg->Bind(wxEVT_PG_CHANGED, &PropertiesPanel::OnPropertyChanged, this);
+        canvas->Bind(wxEVT_LEFT_DOWN, &PropertiesPanel::OnCanvasSelectionChange, this);
 
-        canvas->Bind(wxEVT_LEFT_DOWN, &PropertiesPanel::OnCanvasSelectionChange, this);  // 画布选择改变事件
+        // 新增：绑定画布刷新事件，确保连接信息实时更新
+        canvas->Bind(wxEVT_PAINT, &PropertiesPanel::OnCanvasRefresh, this);
     }
 
     // 更新属性面板内容
     void UpdateProperties() {
         pg->Clear();
+        UpdateConnectionInfo(); // 更新连接信息
 
         if (canvas->HasSelectedWire()) {
             // 显示导线信息
@@ -4311,10 +4422,23 @@ public:
                         wire->GetEndPin()->GetY())));
                 pg->Append(new wxBoolProperty("Signal Value", "Value",
                     wire->GetStartPin()->GetValue()));
+
+                // 添加导线详细信息
+                Pin* startPin = wire->GetStartPin();
+                Pin* endPin = wire->GetEndPin();
+                if (startPin && endPin) {
+                    pg->Append(new wxStringProperty("From", "FromElement",
+                        GetPinElementInfo(startPin)));
+                    pg->Append(new wxStringProperty("To", "ToElement",
+                        GetPinElementInfo(endPin)));
+                }
             }
         }
         else if (canvas->GetSelectedElement()) {
             canvas->GetSelectedElement()->GetProperties(pg);
+
+            // 为选中的元件添加连接信息到属性网格
+            AddElementConnectionInfo(canvas->GetSelectedElement());
         }
         else {
             pg->Append(new wxStringProperty("No Selection", "None",
@@ -4325,22 +4449,241 @@ public:
 private:
     // 属性改变事件处理函数
     void OnPropertyChanged(wxPropertyGridEvent& event) {
-        CircuitElement* selected = canvas->GetSelectedElement();  // 获取当前选中的元件
+        CircuitElement* selected = canvas->GetSelectedElement();
         if (selected) {
-            selected->SetProperties(pg);  // 将属性网格中的值应用到元件
-            canvas->Refresh();  // 刷新画布以显示更新后的状态
+            selected->SetProperties(pg);
+            canvas->Refresh();
+            UpdateConnectionInfo(); // 属性改变后更新连接信息
         }
     }
 
     // 画布选择改变事件处理函数
     void OnCanvasSelectionChange(wxMouseEvent& event) {
-        UpdateProperties();  // 更新属性面板显示
-        event.Skip();  // 继续传递事件，让画布也能处理该事件
+        UpdateProperties();
+        event.Skip();
+    }
+
+    // 新增：画布刷新事件处理
+    void OnCanvasRefresh(wxPaintEvent& event) {
+        UpdateConnectionInfo(); // 画布刷新时也更新连接信息
+        event.Skip();
+    }
+
+    // 更新连接信息文本框内容
+    void UpdateConnectionInfo() {
+        wxString info;
+
+        if (canvas->HasSelectedWire()) {
+            Wire* wire = canvas->GetSelectedWire();
+            if (wire) {
+                info = GetWireConnectionInfo(wire);
+            }
+        }
+        else if (canvas->GetSelectedElement()) {
+            info = GetElementConnectionInfo(canvas->GetSelectedElement());
+        }
+        else if (canvas->HasSelectedElements()) {
+            // 多选情况
+            info = GetMultipleSelectionInfo();
+        }
+        else {
+            info = "No element selected.\n\nTip: Select an element or wire to view connection details.";
+        }
+
+        connectionInfoText->SetValue(info);
+    }
+
+    // 获取导线连接信息
+    wxString GetWireConnectionInfo(Wire* wire) {
+        wxString info;
+        Pin* startPin = wire->GetStartPin();
+        Pin* endPin = wire->GetEndPin();
+
+        if (startPin && endPin) {
+            info = wxString::Format(" WIRE CONNECTION\n\n"
+                "From: %s\n"
+                "To: %s\n"
+                "Signal: %s\n"
+                "Type: %s → %s\n\n"
+                "This wire carries the signal from the output pin to the input pin.",
+                GetPinDetailedInfo(startPin).c_str(),
+                GetPinDetailedInfo(endPin).c_str(),
+                startPin->GetValue() ? "HIGH (1)" : "LOW (0)",
+                startPin->IsInput() ? "INPUT" : "OUTPUT",
+                endPin->IsInput() ? "INPUT" : "OUTPUT");
+        }
+
+        return info;
+    }
+
+    // 获取元件连接信息
+    wxString GetElementConnectionInfo(CircuitElement* element) {
+        wxString info;
+        info <<  element->GetDisplayName().Upper() << " CONNECTION INFO\n\n";
+
+        auto pins = element->GetPins();
+        std::vector<Pin*> inputPins;
+        std::vector<Pin*> outputPins;
+
+        // 分类引脚
+        for (auto pin : pins) {
+            if (pin->IsInput()) {
+                inputPins.push_back(pin);
+            }
+            else {
+                outputPins.push_back(pin);
+            }
+        }
+
+        // 输入连接信息
+        info << "INPUT CONNECTIONS:\n";
+        if (inputPins.empty()) {
+            info << "  No input pins\n";
+        }
+        else {
+            for (size_t i = 0; i < inputPins.size(); ++i) {
+                Pin* pin = inputPins[i];
+                Wire* connectedWire = pin->GetConnectedWire();
+                if (connectedWire) {
+                    Pin* sourcePin = (connectedWire->GetStartPin() == pin) ?
+                        connectedWire->GetEndPin() : connectedWire->GetStartPin();
+                    info << wxString::Format("  %zu. %s ← %s\n",
+                        i + 1, GetPinShortInfo(pin).c_str(), GetPinElementInfo(sourcePin).c_str());
+                }
+                else {
+                    info << wxString::Format("  %zu. %s : NOT CONNECTED\n",
+                        i + 1, GetPinShortInfo(pin).c_str());
+                }
+            }
+        }
+
+        info << "\nOUTPUT CONNECTIONS:\n";
+        if (outputPins.empty()) {
+            info << "  No output pins\n";
+        }
+        else {
+            for (size_t i = 0; i < outputPins.size(); ++i) {
+                Pin* pin = outputPins[i];
+                Wire* connectedWire = pin->GetConnectedWire();
+                if (connectedWire) {
+                    Pin* targetPin = (connectedWire->GetStartPin() == pin) ?
+                        connectedWire->GetEndPin() : connectedWire->GetStartPin();
+                    info << wxString::Format("  %zu. %s → %s\n",
+                        i + 1, GetPinShortInfo(pin).c_str(), GetPinElementInfo(targetPin).c_str());
+                }
+                else {
+                    info << wxString::Format("  %zu. %s : NOT CONNECTED\n",
+                        i + 1, GetPinShortInfo(pin).c_str());
+                }
+            }
+        }
+
+        // 添加状态信息
+        info << "\nCURRENT STATE:\n";
+        if (element->GetType() == TYPE_INPUT) {
+            InputOutput* io = dynamic_cast<InputOutput*>(element);
+            if (io) {
+                info << wxString::Format("  Value: %s\n", io->GetValue() ? "HIGH (1)" : "LOW (0)");
+            }
+        }
+        else if (element->GetType() == TYPE_OUTPUT) {
+            InputOutput* io = dynamic_cast<InputOutput*>(element);
+            if (io) {
+                info << wxString::Format("  Value: %s\n", io->GetValue() ? "HIGH (1)" : "LOW (0)");
+            }
+        }
+        else if (element->GetType() == TYPE_CLOCK) {
+            ClockElement* clock = dynamic_cast<ClockElement*>(element);
+            if (clock) {
+                info << wxString::Format("  Frequency: %d Hz\n", clock->GetFrequency());
+                //info << wxString::Format("  Current: %s\n", clock->GetValue() ? "HIGH" : "LOW");
+            }
+        }
+
+        return info;
+    }
+
+    // 获取多选信息
+    wxString GetMultipleSelectionInfo() {
+        int selectedCount = 0;
+        for (auto& element : canvas->GetElements()) {
+            if (element->IsSelected()) {
+                selectedCount++;
+            }
+        }
+
+        return wxString::Format("MULTIPLE SELECTION\n\n"
+            " Selected Elements: %d\n\n"
+            "Tip: Select individual elements to view detailed connection information.",
+            selectedCount);
+    }
+
+    // 为选中的元件添加连接信息到属性网格
+    void AddElementConnectionInfo(CircuitElement* element) {
+        auto pins = element->GetPins();
+        int inputConnections = 0;
+        int outputConnections = 0;
+
+        // 统计连接数
+        for (auto pin : pins) {
+            if (pin->GetConnectedWire()) {
+                if (pin->IsInput()) {
+                    inputConnections++;
+                }
+                else {
+                    outputConnections++;
+                }
+            }
+        }
+
+        // 添加连接统计到属性网格
+        //pg->Append(new wxCategoryProperty("Connection Statistics"));
+        pg->Append(new wxIntProperty("Input Connections", "InputConnections", inputConnections));
+        pg->Append(new wxIntProperty("Output Connections", "OutputConnections", outputConnections));
+        pg->Append(new wxIntProperty("Total Pins", "TotalPins", (int)pins.size()));
+
+        // 设置连接统计属性为只读
+        pg->SetPropertyReadOnly("InputConnections");
+        pg->SetPropertyReadOnly("OutputConnections");
+        pg->SetPropertyReadOnly("TotalPins");
+    }
+
+    // 辅助函数：获取引脚的详细信息
+    wxString GetPinDetailedInfo(Pin* pin) {
+        if (!pin) return "Unknown Pin";
+        CircuitElement* parent = pin->GetParent();
+        if (!parent) return "Orphan Pin";
+
+        return wxString::Format("%s [%s] at (%d,%d)",
+            parent->GetDisplayName().c_str(),
+            pin->IsInput() ? "INPUT" : "OUTPUT",
+            pin->GetX(), pin->GetY());
+    }
+
+    // 辅助函数：获取引脚的简短信息
+    wxString GetPinShortInfo(Pin* pin) {
+        if (!pin) return "Unknown";
+        CircuitElement* parent = pin->GetParent();
+        if (!parent) return "Orphan";
+
+        return wxString::Format("%s(%s)",
+            parent->GetDisplayName().c_str(),
+            pin->IsInput() ? "IN" : "OUT");
+    }
+
+    // 辅助函数：获取引脚所属元件信息
+    wxString GetPinElementInfo(Pin* pin) {
+        if (!pin) return "Unknown";
+        CircuitElement* parent = pin->GetParent();
+        if (!parent) return "Orphan Pin";
+
+        return parent->GetDisplayName();
     }
 
     // 私有成员变量
-    wxPropertyGrid* pg;       // 属性网格控件指针
-    CircuitCanvas* canvas;    // 电路画布指针
+    wxPropertyGrid* pg;           // 属性网格控件指针
+    wxTextCtrl* connectionInfoText; // 新增：连接信息文本框
+    CircuitCanvas* canvas;        // 电路画布指针
 };
 
 // 主菜单类
@@ -4680,10 +5023,15 @@ public:
         toolBar = new MainToolbar(this, canvas);
         SetToolBar(toolBar);  // 设置工具栏
 
-        // 创建状态栏
-        CreateStatusBar(2);  // 创建两个字段的状态栏
-        GetStatusBar()->SetStatusText("Ready", 0);  // 设置初始状态文本
+        // 创建状态栏 - 修改为3个字段
+        CreateStatusBar(3);
+        GetStatusBar()->SetStatusText("Ready", 0);  // 第一个字段显示连接信息
         GetStatusBar()->SetStatusText("", 1);       // 第二个字段用于显示位置信息
+        GetStatusBar()->SetStatusText("", 2);       // 第三个字段用于显示工具信息
+
+        // 设置状态栏字段宽度
+        int widths[] = { 400, 200, -1 };  // 第一个字段显示连接信息，第二个字段显示位置，第三个字段自动扩展
+        GetStatusBar()->SetStatusWidths(3, widths);
 
         // 绑定事件
         Bind(wxEVT_MENU, &MainFrame::OnMenuEvent, this);        // 菜单事件
@@ -5244,7 +5592,7 @@ private:
                 canvas->DeleteSelectedElement();
             }
             // 最后删除所有选中的元件（多选情况）
-             if (canvas->HasSelectedElements()) {
+            if (canvas->HasSelectedElements()) {
                 canvas->DeleteAllSelectedElements();
             }
             break;
