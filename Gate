@@ -1,301 +1,197 @@
-// -------------------------- 逻辑门类（Gate）- 最终修复版 --------------------------
+// 逻辑门基类
 class Gate : public CircuitElement {
 public:
-    // 构造函数：调用基类构造，初始化引脚（复用基类SetPosition的引脚更新逻辑）
     Gate(ElementType type, int x, int y) : CircuitElement(type, x, y) {
-        // 初始化引脚（与基类CircuitElement的SetPosition逻辑保持一致）
-        const int PIN_OFFSET = 20; // 引脚与门中心的水平距离
+        const int PIN_OFFSET = 40; // 扩大后的引脚偏移
         if (type == TYPE_NOT) {
             inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y, true, this));
             outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
         }
         else {
-            inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y - 10, true, this));
-            inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y + 10, true, this));
+            inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y - 20, true, this));
+            inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y + 20, true, this));
             outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
         }
     }
 
-    // 重写Draw：修复绘图兼容性，与程序中InputOutput的绘图风格统一
     virtual void Draw(wxDC& dc) override {
-        // 1. 绘图基础配置：复用程序中InputOutput的画刷/画笔逻辑，避免颜色冲突
+        // 保存初始字体状态（关键：记录绘制前的默认字体）
+        wxFont originalFont = dc.GetFont();
+
         wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
-        wxBrush fillBrush = *wxWHITE_BRUSH; // 与InputOutput的默认填充一致
+        wxBrush fillBrush = *wxWHITE_BRUSH;
         dc.SetPen(borderPen);
         dc.SetBrush(fillBrush);
 
-        // 2. 门尺寸常量（统一管理，与引脚位置匹配）
-        const int GATE_WIDTH = 40;
-        const int GATE_HEIGHT = 30;
-        const int PIN_LENGTH = 8;
-        const int NOT_CIRCLE_RADIUS = 4;
+        const int GATE_WIDTH = 80;
+        const int GATE_HEIGHT = 60;
+        const int PIN_LENGTH = 16;
+        const int NOT_CIRCLE_RADIUS = 8;
 
-        // 3. 按门类型绘制图形（修复wxPoint初始化，兼容所有wxWidgets版本）
         switch (type) {
         case TYPE_AND: {
-            // 1. 绘图基础配置
-            wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
-            wxBrush fillBrush = *wxWHITE_BRUSH;
-            dc.SetPen(borderPen);
-            dc.SetBrush(fillBrush);
-
-            // 2. 尺寸常量（与构造函数的PIN_OFFSET保持一致，确保坐标对齐）
-            const int PIN_OFFSET = 20;  // 和Gate构造函数中的PIN_OFFSET完全一致
-            const int GATE_WIDTH = 40;  // 门体水平长度（= 2*PIN_OFFSET，确保中心对齐）
-            const int GATE_HEIGHT = 30;
-            const int PIN_LENGTH = 8;
-
-            // 3. 绘制AND门梯形主体（基于引脚初始化坐标的基准点）
+            const int PIN_OFFSET = 40;
             wxPoint andPoints[] = {
-                wxPoint(posX - PIN_OFFSET, posY - GATE_HEIGHT / 2),  // 左上边（与输入引脚X坐标一致）
-                wxPoint(posX - PIN_OFFSET / 3, posY - GATE_HEIGHT / 2),  // 右上边
-                wxPoint(posX + PIN_OFFSET, posY),  // 右顶点（与输出引脚X坐标一致）
-                wxPoint(posX - PIN_OFFSET / 3, posY + GATE_HEIGHT / 2),  // 右下边
-                wxPoint(posX - PIN_OFFSET, posY + GATE_HEIGHT / 2)   // 左下边
+                wxPoint(posX - PIN_OFFSET, posY - GATE_HEIGHT / 2),
+                wxPoint(posX - PIN_OFFSET / 3, posY - GATE_HEIGHT / 2),
+                wxPoint(posX + PIN_OFFSET, posY),
+                wxPoint(posX - PIN_OFFSET / 3, posY + GATE_HEIGHT / 2),
+                wxPoint(posX - PIN_OFFSET, posY + GATE_HEIGHT / 2)
             };
             dc.DrawPolygon(5, andPoints);
 
-            // 4. 绘制输入引脚（使用初始化的引脚坐标，与门体左侧对齐）
-            // 从引脚列表获取实际坐标（而非硬编码），确保100%对齐
             if (inputs.size() >= 2) {
-                // 上输入引脚：左延伸
-                dc.DrawLine(inputs[0]->GetX(), inputs[0]->GetY(),
-                    inputs[0]->GetX() - PIN_LENGTH, inputs[0]->GetY());
-                // 下输入引脚：左延伸
-                dc.DrawLine(inputs[1]->GetX(), inputs[1]->GetY(),
-                    inputs[1]->GetX() - PIN_LENGTH, inputs[1]->GetY());
-                // 绘制引脚圆点（视觉标识）
+                dc.DrawLine(inputs[0]->GetX(), inputs[0]->GetY(), inputs[0]->GetX() - PIN_LENGTH, inputs[0]->GetY());
+                dc.DrawLine(inputs[1]->GetX(), inputs[1]->GetY(), inputs[1]->GetX() - PIN_LENGTH, inputs[1]->GetY());
                 dc.SetBrush(*wxBLACK_BRUSH);
-                dc.DrawCircle(inputs[0]->GetX(), inputs[0]->GetY(), 3);
-                dc.DrawCircle(inputs[1]->GetX(), inputs[1]->GetY(), 3);
+                dc.DrawCircle(inputs[0]->GetX(), inputs[0]->GetY(), 6);
+                dc.DrawCircle(inputs[1]->GetX(), inputs[1]->GetY(), 6);
                 dc.SetBrush(*wxWHITE_BRUSH);
             }
 
-            // 5. 绘制输出引脚（使用初始化的引脚坐标，与门体右侧对齐）
             if (!outputs.empty()) {
-                dc.DrawLine(outputs[0]->GetX(), outputs[0]->GetY(),
-                    outputs[0]->GetX() + PIN_LENGTH, outputs[0]->GetY());
-                // 绘制引脚圆点
+                dc.DrawLine(outputs[0]->GetX(), outputs[0]->GetY(), outputs[0]->GetX() + PIN_LENGTH, outputs[0]->GetY());
                 dc.SetBrush(*wxBLACK_BRUSH);
-                dc.DrawCircle(outputs[0]->GetX(), outputs[0]->GetY(), 3);
+                dc.DrawCircle(outputs[0]->GetX(), outputs[0]->GetY(), 6);
                 dc.SetBrush(*wxWHITE_BRUSH);
             }
 
-            // 6. 绘制标签
+            // 设置AND门标签字体（放大）
+            wxFont labelFont = originalFont; // 基于初始字体修改，避免多层继承
+            labelFont.SetPointSize(14);
+            dc.SetFont(labelFont);
             dc.SetTextForeground(*wxBLACK);
-            dc.DrawText("AND", posX - 15, posY - 7);
+            dc.DrawText("AND", posX - 30, posY - 14);
             break;
         }
-
-
-
-
-
         case TYPE_OR: {
-            // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
-            const int GATE_WIDTH = 40;    // 门水平总宽度
-            const int GATE_HEIGHT = 30;   // 门垂直总高度
-            const int PIN_LENGTH = 8;     // 引脚延伸长度
-            const int PIN_RADIUS = 2;     // 引脚衔接点半径
+            const int PIN_OFFSET = 40;
+            wxPoint gateCenter(posX, posY);
+            int arcLeftX = posX - GATE_WIDTH / 2;
+            int arcTopY = posY - GATE_HEIGHT / 2;
+            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT);
 
-            // 2. 计算椭圆扇形关键坐标（基于门中心posX/posY，确保居中）
-            wxPoint gateCenter(posX, posY);                      // 门中心（基准点）
-            int arcLeftX = posX - GATE_WIDTH / 2;                // 椭圆扇形左边界X
-            int arcTopY = posY - GATE_HEIGHT / 2;                // 椭圆扇形上边界Y
-            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
-
-            // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
-            dc.SetPen(*wxBLACK_PEN);
-            dc.SetBrush(*wxWHITE_BRUSH);
-            // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                double rx = rect.width /2.0;  // 椭圆X轴半径
-                double ry = rect.height / 2.0; // 椭圆Y轴半径
+                double rx = rect.width / 2.0;
+                double ry = rect.height / 2.0;
                 std::vector<wxPoint> points;
-                points.push_back(center);  // 扇形中心点（确保闭合）
-
-                // 从endAngle向startAngle生成点（逆序），强制扇形开口方向朝左
+                points.push_back(center);
                 for (int i = segments; i >= 0; i--) {
                     double angleRad = startAngle + (endAngle - startAngle) * i / segments;
-                    // 关键修正：X轴坐标取反，直接反转水平方向，确保弧形在右侧、开口在左侧
                     int x = center.x - rx * cos(angleRad);
                     int y = center.y + ry * sin(angleRad);
                     points.push_back(wxPoint(x, y));
                 }
-
-                // 绘制扇形多边形（自动闭合，最终形态为右侧弧形、左侧开口）
                 dc.DrawPolygon(static_cast<int>(points.size()), &points[0]);
                 };
-            // 角度参数：保持30°(M_PI/6)到330°(11*M_PI/6)，通过X轴取反实现开口朝左
+
             DrawEllipticalSector(dc, arcRect, M_PI / 6, 11 * M_PI / 6);
 
-            // 4. 绘制输入引脚（左侧开口处，与扇形边缘精准衔接，符合左入逻辑）
-            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4); // 上输入引脚（左侧开口位置）
-            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4); // 下输入引脚（左侧开口位置）
-            // 上输入引脚：左延伸+衔接点（与开口边缘对齐，无偏移）
+            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4);
+            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4);
             dc.DrawLine(upperInputPin.x - PIN_LENGTH, upperInputPin.y, upperInputPin.x, upperInputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(upperInputPin, PIN_RADIUS);
+            dc.DrawCircle(upperInputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
-            // 下输入引脚：左延伸+衔接点
             dc.DrawLine(lowerInputPin.x - PIN_LENGTH, lowerInputPin.y, lowerInputPin.x, lowerInputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(lowerInputPin, PIN_RADIUS);
+            dc.DrawCircle(lowerInputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
 
-            // 5. 绘制输出引脚（右侧弧形顶点，符合右出逻辑）
-            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY); // 输出引脚（右侧弧形顶点）
+            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY);
             dc.DrawLine(outputPin.x, outputPin.y, outputPin.x + PIN_LENGTH, outputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(outputPin, PIN_RADIUS);
+            dc.DrawCircle(outputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
 
-            // 6. 绘制OR门标签（居中显示，与其他门标签位置统一）
+            // 设置OR门标签字体（放大）
+            wxFont labelFont = originalFont;
+            labelFont.SetPointSize(14);
+            dc.SetFont(labelFont);
             dc.SetTextForeground(*wxBLACK);
-            dc.DrawText("OR", posX - 8, posY - 7);
+            dc.DrawText("OR", posX - 16, posY - 14);
             break;
         }
-
-
-
-
-
-
-
-
-
-
-
         case TYPE_NOT: {
-            // 1. 基础尺寸定义（与其他门视觉统一）
-            const int GATE_WIDTH = 40;    // 三角形水平长度
-            const int GATE_HEIGHT = 30;   // 三角形垂直高度
-            const int PIN_LENGTH = 8;     // 引脚长度
-            const int NOT_CIRCLE_RADIUS = 4; // 反相小圆半径
+            wxPoint triRight(posX + GATE_WIDTH / 2, posY);
+            wxPoint triTop(posX - GATE_WIDTH / 2, posY - GATE_HEIGHT / 2);
+            wxPoint triBottom(posX - GATE_WIDTH / 2, posY + GATE_HEIGHT / 2);
+            wxPoint triVertices[] = { triRight, triTop, triBottom };
+            dc.DrawPolygon(3, triVertices);
 
-            // 2. 计算三角形顶点（直角在右，左侧为斜边，符合NOT门标准符号）
-            wxPoint triRight(posX + GATE_WIDTH / 2, posY);          // 三角形右顶点（直角顶点，输出侧）
-            wxPoint triTop(posX - GATE_WIDTH / 2, posY - GATE_HEIGHT / 2); // 三角形上顶点（左侧）
-            wxPoint triBottom(posX - GATE_WIDTH / 2, posY + GATE_HEIGHT / 2); // 三角形下顶点（左侧）
-            wxPoint triVertices[] = { triRight, triTop, triBottom }; // 3个顶点（确保绘制顺序正确）
-
-            // 3. 绘制三角形主体（修正方向，直角在右）
-            dc.SetPen(selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1));
-            dc.SetBrush(*wxWHITE_BRUSH);
-            dc.DrawPolygon(3, triVertices); // 按“右顶点→上顶点→下顶点”顺序绘制，确保三角形方向正确
-
-            // 4. 绘制输入引脚（与三角形左侧斜边中点衔接）
-            wxPoint inputPin(posX - GATE_WIDTH / 2, posY); // 输入引脚起点（左侧斜边中点）
+            wxPoint inputPin(posX - GATE_WIDTH / 2, posY);
             dc.DrawLine(inputPin.x - PIN_LENGTH, inputPin.y, inputPin.x, inputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(inputPin, 2); // 引脚衔接点
+            dc.DrawCircle(inputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
 
-
-            // 5. 绘制输出引脚+反相小圆（延长输出引脚长度，与输入引脚长度匹配）
-            wxPoint outputPin(triRight.x, triRight.y); // 输出引脚起点（三角形右顶点）
-            // 延长输出引脚直线段：长度从NOT_CIRCLE_RADIUS改为PIN_LENGTH（与输入引脚统一）
-            dc.DrawLine(outputPin.x, outputPin.y,
-                outputPin.x + PIN_LENGTH, outputPin.y);
-
-            // 反相小圆（右移至输出引脚末端，填充黑色）
+            wxPoint outputPin(triRight.x, triRight.y);
+            dc.DrawLine(outputPin.x, outputPin.y, outputPin.x + PIN_LENGTH, outputPin.y);
             dc.SetBrush(*wxRED_BRUSH);
-            dc.DrawCircle(wxPoint(outputPin.x + NOT_CIRCLE_RADIUS * 2, outputPin.y),
-                NOT_CIRCLE_RADIUS);
-            dc.SetBrush(*wxWHITE_BRUSH); // 恢复画刷，避免影响后续元件
+            dc.DrawCircle(wxPoint(outputPin.x + NOT_CIRCLE_RADIUS * 2, outputPin.y), NOT_CIRCLE_RADIUS);
+            dc.SetBrush(*wxWHITE_BRUSH);
 
-            // 6. 绘制标签（三角形上方居中，不遮挡形状）
+            // 设置NOT门标签字体（放大）
+            wxFont labelFont = originalFont;
+            labelFont.SetPointSize(14);
+            dc.SetFont(labelFont);
             dc.SetTextForeground(*wxBLACK);
-            dc.DrawText("NOT", posX - 15, posY - 7);
+            dc.DrawText("NOT", posX - 30, posY - 14);
             break;
         }
-
-
-
         case TYPE_XOR: {
-            // 圆角矩形+斜杠：与程序中简化风格统一
-            // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
-            const int GATE_WIDTH = 40;    // 门水平总宽度
-            const int GATE_HEIGHT = 30;   // 门垂直总高度
-            const int PIN_LENGTH = 8;     // 引脚延伸长度
-            const int PIN_RADIUS = 2;     // 引脚衔接点半径
+            wxPoint gateCenter(posX, posY);
+            int arcLeftX = posX - GATE_WIDTH / 2;
+            int arcTopY = posY - GATE_HEIGHT / 2;
+            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT);
 
-            // 2. 计算椭圆扇形关键坐标（基于门中心posX/posY，确保居中）
-            wxPoint gateCenter(posX, posY);                      // 门中心（基准点）
-            int arcLeftX = posX - GATE_WIDTH / 2;                // 椭圆扇形左边界X
-            int arcTopY = posY - GATE_HEIGHT / 2;                // 椭圆扇形上边界Y
-            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
-
-            // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
-            dc.SetPen(*wxBLACK_PEN);
-            dc.SetBrush(*wxWHITE_BRUSH);
-            // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                double rx = rect.width / 2.0;  // 椭圆X轴半径
-                double ry = rect.height / 2.0; // 椭圆Y轴半径
+                double rx = rect.width / 2.0;
+                double ry = rect.height / 2.0;
                 std::vector<wxPoint> points;
-                points.push_back(center);  // 扇形中心点（确保闭合）
-
-                // 从endAngle向startAngle生成点（逆序），强制扇形开口方向朝左
+                points.push_back(center);
                 for (int i = segments; i >= 0; i--) {
                     double angleRad = startAngle + (endAngle - startAngle) * i / segments;
-                    // 关键修正：X轴坐标取反，直接反转水平方向，确保弧形在右侧、开口在左侧
                     int x = center.x - rx * cos(angleRad);
                     int y = center.y + ry * sin(angleRad);
                     points.push_back(wxPoint(x, y));
                 }
-
-                // 绘制扇形多边形（自动闭合，最终形态为右侧弧形、左侧开口）
                 dc.DrawPolygon(static_cast<int>(points.size()), &points[0]);
                 };
-            // 角度参数：保持30°(M_PI/6)到330°(11*M_PI/6)，通过X轴取反实现开口朝左
+
             DrawEllipticalSector(dc, arcRect, M_PI / 6, 11 * M_PI / 6);
 
-            // 4. 绘制输入引脚（左侧开口处，与扇形边缘精准衔接，符合左入逻辑）
-            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4); // 上输入引脚（左侧开口位置）
-            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4); // 下输入引脚（左侧开口位置）
-            // 上输入引脚：左延伸+衔接点（与开口边缘对齐，无偏移）
+            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4);
+            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4);
             dc.DrawLine(upperInputPin.x - PIN_LENGTH, upperInputPin.y, upperInputPin.x, upperInputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(upperInputPin, PIN_RADIUS);
+            dc.DrawCircle(upperInputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
-            // 下输入引脚：左延伸+衔接点
             dc.DrawLine(lowerInputPin.x - PIN_LENGTH, lowerInputPin.y, lowerInputPin.x, lowerInputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(lowerInputPin, PIN_RADIUS);
+            dc.DrawCircle(lowerInputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
 
-            // 5. 绘制输出引脚（右侧弧形顶点，符合右出逻辑）
-            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY); // 输出引脚（右侧弧形顶点）
+            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY);
             dc.DrawLine(outputPin.x, outputPin.y, outputPin.x + PIN_LENGTH, outputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(outputPin, PIN_RADIUS);
+            dc.DrawCircle(outputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
-            dc.DrawLine(posX + 15, posY - 10, posX - 15, posY + 10); // 斜杠标识
-            dc.DrawText("XOR", posX - 12, posY - 7);
+
+            dc.DrawLine(posX + 30, posY - 20, posX - 30, posY + 20);
+
+            // 设置XOR门标签字体（放大）
+            wxFont labelFont = originalFont;
+            labelFont.SetPointSize(14);
+            dc.SetFont(labelFont);
+            dc.SetTextForeground(*wxBLACK);
+            dc.DrawText("XOR", posX - 21, posY - 14);
             break;
         }
-
-
-
-
         case TYPE_NAND: {
-            // 1. 基础配置（与AND门一致）
-            wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
-            wxBrush fillBrush = *wxWHITE_BRUSH;
-            dc.SetPen(borderPen);
-            dc.SetBrush(fillBrush);
-
-            // 2. 尺寸常量（与AND门、构造函数保持一致）
-            const int PIN_OFFSET = 20;
-            const int GATE_WIDTH = 40;
-            const int GATE_HEIGHT = 30;
-            const int PIN_LENGTH = 8;
-            const int NOT_CIRCLE_RADIUS = 4;
-
-            // 3. 绘制NAND门梯形主体（与AND门完全相同，确保视觉统一）
+            const int PIN_OFFSET = 40;
             wxPoint nandPoints[] = {
                 wxPoint(posX - PIN_OFFSET, posY - GATE_HEIGHT / 2),
                 wxPoint(posX - PIN_OFFSET / 3, posY - GATE_HEIGHT / 2),
@@ -305,303 +201,175 @@ public:
             };
             dc.DrawPolygon(5, nandPoints);
 
-            // 4. 绘制输入引脚（与AND门逻辑一致，使用实际引脚坐标）
             if (inputs.size() >= 2) {
-                dc.DrawLine(inputs[0]->GetX(), inputs[0]->GetY(),
-                    inputs[0]->GetX() - PIN_LENGTH, inputs[0]->GetY());
-                dc.DrawLine(inputs[1]->GetX(), inputs[1]->GetY(),
-                    inputs[1]->GetX() - PIN_LENGTH, inputs[1]->GetY());
+                dc.DrawLine(inputs[0]->GetX(), inputs[0]->GetY(), inputs[0]->GetX() - PIN_LENGTH, inputs[0]->GetY());
+                dc.DrawLine(inputs[1]->GetX(), inputs[1]->GetY(), inputs[1]->GetX() - PIN_LENGTH, inputs[1]->GetY());
                 dc.SetBrush(*wxBLACK_BRUSH);
-                dc.DrawCircle(inputs[0]->GetX(), inputs[0]->GetY(), 3);
-                dc.DrawCircle(inputs[1]->GetX(), inputs[1]->GetY(), 3);
+                dc.DrawCircle(inputs[0]->GetX(), inputs[0]->GetY(), 6);
+                dc.DrawCircle(inputs[1]->GetX(), inputs[1]->GetY(), 6);
                 dc.SetBrush(*wxWHITE_BRUSH);
             }
 
-            // 5. 绘制输出引脚+反相小圆（输出引脚坐标对齐，反相圆在引脚延伸端）
             if (!outputs.empty()) {
-                // 输出引脚延伸
-                dc.DrawLine(outputs[0]->GetX(), outputs[0]->GetY(),
-                    outputs[0]->GetX() + PIN_LENGTH, outputs[0]->GetY());
-                // 反相小圆（在引脚延伸端，避免遮挡）
+                dc.DrawLine(outputs[0]->GetX(), outputs[0]->GetY(), outputs[0]->GetX() + PIN_LENGTH, outputs[0]->GetY());
                 dc.SetBrush(*wxRED_BRUSH);
-                dc.DrawCircle(outputs[0]->GetX() + PIN_LENGTH + NOT_CIRCLE_RADIUS,
-                    outputs[0]->GetY(), NOT_CIRCLE_RADIUS);
+                dc.DrawCircle(outputs[0]->GetX() + PIN_LENGTH + NOT_CIRCLE_RADIUS, outputs[0]->GetY(), NOT_CIRCLE_RADIUS);
                 dc.SetBrush(*wxWHITE_BRUSH);
-                // 输出引脚圆点
                 dc.SetBrush(*wxBLACK_BRUSH);
-                dc.DrawCircle(outputs[0]->GetX(), outputs[0]->GetY(), 3);
+                dc.DrawCircle(outputs[0]->GetX(), outputs[0]->GetY(), 6);
                 dc.SetBrush(*wxWHITE_BRUSH);
             }
 
-            // 6. 绘制标签
+            // 设置NAND门标签字体（放大）
+            wxFont labelFont = originalFont;
+            labelFont.SetPointSize(14);
+            dc.SetFont(labelFont);
             dc.SetTextForeground(*wxBLACK);
-            dc.DrawText("NAND", posX - 20, posY - 7);
+            dc.DrawText("NAND", posX - 47, posY - 14);
             break;
         }
-
-
-
         case TYPE_NOR: {
-            // 1. 尺寸常量统一管理（与其他门视觉风格对齐）
-            const int GATE_WIDTH = 40;    // 门水平总宽度
-            const int GATE_HEIGHT = 30;   // 门垂直总高度
-            const int PIN_LENGTH = 8;     // 引脚延伸长度
-            const int PIN_RADIUS = 2;     // 引脚衔接点半径
+            wxPoint gateCenter(posX, posY);
+            int arcLeftX = posX - GATE_WIDTH / 2;
+            int arcTopY = posY - GATE_HEIGHT / 2;
+            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT);
 
-            // 2. 计算椭圆扇形关键坐标（基于门中心posX/posY，确保居中）
-            wxPoint gateCenter(posX, posY);                      // 门中心（基准点）
-            int arcLeftX = posX - GATE_WIDTH / 2;                // 椭圆扇形左边界X
-            int arcTopY = posY - GATE_HEIGHT / 2;                // 椭圆扇形上边界Y
-            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT); // 椭圆外切矩形
-
-            // 3. 绘制椭圆扇形（修正角度方向，确保开口朝左，符合OR门左入右出逻辑）
-            dc.SetPen(*wxBLACK_PEN);
-            dc.SetBrush(*wxWHITE_BRUSH);
-            // 自定义椭圆扇形绘制函数（重新定义角度范围，强制开口朝左）
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
-                double rx = rect.width / 2.0;  // 椭圆X轴半径
-                double ry = rect.height / 2.0; // 椭圆Y轴半径
+                double rx = rect.width / 2.0;
+                double ry = rect.height / 2.0;
                 std::vector<wxPoint> points;
-                points.push_back(center);  // 扇形中心点（确保闭合）
-
-                // 从endAngle向startAngle生成点（逆序），强制扇形开口方向朝左
+                points.push_back(center);
                 for (int i = segments; i >= 0; i--) {
                     double angleRad = startAngle + (endAngle - startAngle) * i / segments;
-                    // 关键修正：X轴坐标取反，直接反转水平方向，确保弧形在右侧、开口在左侧
                     int x = center.x - rx * cos(angleRad);
                     int y = center.y + ry * sin(angleRad);
                     points.push_back(wxPoint(x, y));
                 }
-
-                // 绘制扇形多边形（自动闭合，最终形态为右侧弧形、左侧开口）
                 dc.DrawPolygon(static_cast<int>(points.size()), &points[0]);
                 };
-            // 角度参数：保持30°(M_PI/6)到330°(11*M_PI/6)，通过X轴取反实现开口朝左
+
             DrawEllipticalSector(dc, arcRect, M_PI / 6, 11 * M_PI / 6);
 
-            // 4. 绘制输入引脚（左侧开口处，与扇形边缘精准衔接，符合左入逻辑）
-            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4); // 上输入引脚（左侧开口位置）
-            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4); // 下输入引脚（左侧开口位置）
-            // 上输入引脚：左延伸+衔接点（与开口边缘对齐，无偏移）
+            wxPoint upperInputPin(arcLeftX, posY - GATE_HEIGHT / 4);
+            wxPoint lowerInputPin(arcLeftX, posY + GATE_HEIGHT / 4);
             dc.DrawLine(upperInputPin.x - PIN_LENGTH, upperInputPin.y, upperInputPin.x, upperInputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(upperInputPin, PIN_RADIUS);
+            dc.DrawCircle(upperInputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
-            // 下输入引脚：左延伸+衔接点
             dc.DrawLine(lowerInputPin.x - PIN_LENGTH, lowerInputPin.y, lowerInputPin.x, lowerInputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(lowerInputPin, PIN_RADIUS);
+            dc.DrawCircle(lowerInputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
 
-            // 5. 绘制输出引脚（右侧弧形顶点，符合右出逻辑）
-            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY); // 输出引脚（右侧弧形顶点）
+            wxPoint outputPin(arcLeftX + GATE_WIDTH, posY);
             dc.DrawLine(outputPin.x, outputPin.y, outputPin.x + PIN_LENGTH, outputPin.y);
             dc.SetBrush(*wxBLACK_BRUSH);
-            dc.DrawCircle(outputPin, PIN_RADIUS);
+            dc.DrawCircle(outputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
 
-            // 5. 绘制输出引脚+反相小圆（NOR门核心标识，位置与NAND门统一）
             if (!outputs.empty()) {
-                // 输出引脚：右延伸（与OR门输出引脚长度一致）
-                dc.DrawLine(outputs[0]->GetX(), outputs[0]->GetY(),
-                    outputs[0]->GetX() + PIN_LENGTH, outputs[0]->GetY());
-
-                // 反相小圆：在输出引脚延伸端（避免遮挡门体，与NAND门反相圆位置对齐）
+                dc.DrawLine(outputs[0]->GetX(), outputs[0]->GetY(), outputs[0]->GetX() + PIN_LENGTH, outputs[0]->GetY());
                 dc.SetBrush(*wxRED_BRUSH);
-                dc.DrawCircle(
-                    outputs[0]->GetX() + PIN_LENGTH + NOT_CIRCLE_RADIUS,  // 右移引脚长度+小圆半径
-                    outputs[0]->GetY(),
-                    NOT_CIRCLE_RADIUS
-                );
+                dc.DrawCircle(outputs[0]->GetX() + PIN_LENGTH + NOT_CIRCLE_RADIUS, outputs[0]->GetY(), NOT_CIRCLE_RADIUS);
                 dc.SetBrush(*wxWHITE_BRUSH);
-
-                // 输出引脚圆点：视觉标识（与OR门一致）
                 dc.SetBrush(*wxBLACK_BRUSH);
-                dc.DrawCircle(outputs[0]->GetX(), outputs[0]->GetY(), PIN_RADIUS);
+                dc.DrawCircle(outputs[0]->GetX(), outputs[0]->GetY(), 4);
                 dc.SetBrush(*wxWHITE_BRUSH);
             }
 
-            // 6. 绘制标签（位置与OR门对齐，确保整体视觉统一）
+            // 设置NOR门标签字体（放大）
+            wxFont labelFont = originalFont;
+            labelFont.SetPointSize(14);
+            dc.SetFont(labelFont);
             dc.SetTextForeground(*wxBLACK);
-            dc.DrawText("NOR", posX - 12, posY - 7);
+            dc.DrawText("NOR", posX - 21, posY - 14);
             break;
         }
-
-
         default:
             break;
         }
 
-// 绘制引脚圆点：与InputOutput的引脚显示风格统一（圆形标识）
+        // 绘制引脚圆点
         dc.SetPen(*wxBLACK_PEN);
         dc.SetBrush(*wxWHITE_BRUSH);
-        // 输入引脚绘制：AND门单独修正X（偏右）和Y（上下偏移）坐标
         for (auto& pin : inputs) {
-            
             int drawX = pin->GetX();
             int drawY = pin->GetY();
-            if (this->type == TYPE_OR) {
-                if (drawY < this->posY) { // 上面输入引脚（Y坐标小于门中心Y）
-                    drawY += 3;     // 向下偏移3像素，修正偏上
-                }
-                else if (drawY > this->posY) { // 下面输入引脚（Y坐标大于门中心Y）
-                    drawY -= 3;     // 向上偏移3像素，修正偏下
-                }
+            if (type == TYPE_OR || type == TYPE_NOR || type == TYPE_XOR) {
+                if (drawY < posY) drawY += 6;
+                else if (drawY > posY) drawY -= 6;
             }
-            if (this->type == TYPE_NOR) {
-                if (drawY < this->posY) { // 上面输入引脚（Y坐标小于门中心Y）
-                    drawY += 3;     // 向下偏移3像素，修正偏上
-                }
-                else if (drawY > this->posY) { // 下面输入引脚（Y坐标大于门中心Y）
-                    drawY -= 3;     // 向上偏移3像素，修正偏下
-                }
-            }
-            if (this->type == TYPE_XOR) {
-                if (drawY < this->posY) { // 上面输入引脚（Y坐标小于门中心Y）
-                    drawY += 3;     // 向下偏移3像素，修正偏上
-                }
-                else if (drawY > this->posY) { // 下面输入引脚（Y坐标大于门中心Y）
-                    drawY -= 3;     // 向上偏移3像素，修正偏下
-                }
-            }
-            dc.DrawCircle(drawX, drawY, 3);
+            dc.DrawCircle(drawX, drawY, 6);
         }
-        // 输出引脚绘制：保持原AND门X轴偏移逻辑（若无需调整Y则不变）
         for (auto& pin : outputs) {
             int drawX = pin->GetX();
-            dc.DrawCircle(drawX, pin->GetY(), 3);
+            dc.DrawCircle(drawX, pin->GetY(), 6);
         }
 
-
+        // 关键修复：强制恢复初始默认字体，避免影响后续元件
+        dc.SetFont(originalFont);
     }
 
-    // 重写Update：修复引脚值传递逻辑，与Wire类的Update协同
+    // 以下Update、GetPins、GetBoundingBox等方法保持不变（与之前提供的代码一致）
     virtual void Update() override {
         if (inputs.empty() || outputs.empty()) return;
-
         bool result = false;
         switch (type) {
-        case TYPE_AND:
-            // 确保双输入有效（避免数组越界）
-            if (inputs.size() >= 2) {
-                result = inputs[0]->GetValue() && inputs[1]->GetValue();
-            }
-            break;
-        case TYPE_OR:
-            if (inputs.size() >= 2) {
-                result = inputs[0]->GetValue() || inputs[1]->GetValue();
-            }
-            break;
-        case TYPE_NOT:
-            if (inputs.size() >= 1) {
-                result = !inputs[0]->GetValue();
-            }
-            break;
-        case TYPE_XOR:
-            if (inputs.size() >= 2) {
-                result = inputs[0]->GetValue() != inputs[1]->GetValue();
-            }
-            break;
-        case TYPE_NAND:
-            if (inputs.size() >= 2) {
-                result = !(inputs[0]->GetValue() && inputs[1]->GetValue());
-            }
-            break;
-        case TYPE_NOR:
-            if (inputs.size() >= 2) {
-                result = !(inputs[0]->GetValue() || inputs[1]->GetValue());
-            }
-            break;
-        default:
-            break;
+        case TYPE_AND: result = inputs.size() >= 2 ? (inputs[0]->GetValue() && inputs[1]->GetValue()) : false; break;
+        case TYPE_OR: result = inputs.size() >= 2 ? (inputs[0]->GetValue() || inputs[1]->GetValue()) : false; break;
+        case TYPE_NOT: result = inputs.size() >= 1 ? !inputs[0]->GetValue() : false; break;
+        case TYPE_XOR: result = inputs.size() >= 2 ? (inputs[0]->GetValue() != inputs[1]->GetValue()) : false; break;
+        case TYPE_NAND: result = inputs.size() >= 2 ? !(inputs[0]->GetValue() && inputs[1]->GetValue()) : false; break;
+        case TYPE_NOR: result = inputs.size() >= 2 ? !(inputs[0]->GetValue() || inputs[1]->GetValue()) : false; break;
+        default: break;
         }
-
-        // 将结果传递到输出引脚（与Wire类的Update逻辑协同）
-        for (auto& pin : outputs) {
-            pin->SetValue(result);
-        }
+        for (auto& pin : outputs) pin->SetValue(result);
     }
 
-    // 重写GetPins：返回所有输入/输出引脚，供Wire类连接使用
     virtual std::vector<Pin*> GetPins() override {
         std::vector<Pin*> allPins;
-        for (auto& pin : inputs) {
-            allPins.push_back(pin.get());
-        }
-        for (auto& pin : outputs) {
-            allPins.push_back(pin.get());
-        }
+        for (auto& pin : inputs) allPins.push_back(pin.get());
+        for (auto& pin : outputs) allPins.push_back(pin.get());
         return allPins;
     }
 
-    // 重写GetBoundingBox：扩大范围，确保与Canvas的选择逻辑匹配
-    virtual wxRect GetBoundingBox() const override {
-        // 覆盖门主体+引脚+反相小圆，避免选中时漏选
-        return wxRect(posX - 25, posY - 20, 50, 40);
-    }
-
-    // 重写GetName：与InputOutput的命名风格统一，供序列化使用
+    virtual wxRect GetBoundingBox() const override { return wxRect(posX - 50, posY - 40, 100, 80); }
     virtual wxString GetName() const override {
         switch (type) {
-        case TYPE_AND: return "AND";
-        case TYPE_OR:  return "OR";
-        case TYPE_NOT: return "NOT";
-        case TYPE_XOR: return "XOR";
-        case TYPE_NAND:return "NAND";
-        case TYPE_NOR: return "NOR";
+        case TYPE_AND: return "AND"; case TYPE_OR: return "OR"; case TYPE_NOT: return "NOT";
+        case TYPE_XOR: return "XOR"; case TYPE_NAND: return "NAND"; case TYPE_NOR: return "NOR";
         default: return "UnknownGate";
         }
     }
-
-    // 重写GetDisplayName：供属性面板和菜单显示
-    virtual wxString GetDisplayName() const override {
-        return GetName() + " Gate";
-    }
-
-    // 重写Serialize：与InputOutput的序列化格式兼容，供SaveCircuit使用
-    virtual void Serialize(wxString& data) const override {
-        // 格式：类型,X坐标,Y坐标,（与InputOutput的序列化结构对齐）
-        data += wxString::Format("%d,%d,%d,", static_cast<int>(type), posX, posY);
-    }
-
-    // 重写Deserialize：修复引脚同步问题，与LoadCircuit协同
+    virtual wxString GetDisplayName() const override { return GetName() + " Gate"; }
+    virtual void Serialize(wxString& data) const override { data += wxString::Format("%d,%d,%d", type, posX, posY); }
     virtual void Deserialize(const wxString& data) override {
         wxStringTokenizer tokenizer(data, ",");
         if (tokenizer.CountTokens() >= 3) {
             long typeVal, x, y;
-            // 安全解析，避免非法数据导致崩溃（与InputOutput的解析逻辑一致）
-            if (tokenizer.GetNextToken().ToLong(&typeVal) &&
-                tokenizer.GetNextToken().ToLong(&x) &&
-                tokenizer.GetNextToken().ToLong(&y)) {
+            if (tokenizer.GetNextToken().ToLong(&typeVal) && tokenizer.GetNextToken().ToLong(&x) && tokenizer.GetNextToken().ToLong(&y)) {
                 type = static_cast<ElementType>(typeVal);
                 SetPosition(static_cast<int>(x), static_cast<int>(y));
-                // 重新初始化引脚（确保反序列化后引脚位置与门同步）
-                const int PIN_OFFSET = 20;
-                inputs.clear();
-                outputs.clear();
+                const int PIN_OFFSET = 40;
+                inputs.clear(); outputs.clear();
                 if (type == TYPE_NOT) {
                     inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y, true, this));
                     outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
                 }
                 else {
-                    inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y - 10, true, this));
-                    inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y + 10, true, this));
+                    inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y - 20, true, this));
+                    inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y + 20, true, this));
                     outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
                 }
             }
         }
     }
-
-    // 重写GetProperties：与InputOutput的属性面板风格统一
     virtual void GetProperties(wxPropertyGrid* pg) const override {
-        // 属性项名称与InputOutput对齐，供PropertiesPanel编辑
         pg->Append(new wxStringProperty("Type", "Type", GetDisplayName()));
         pg->Append(new wxIntProperty("X Position", "X", posX));
         pg->Append(new wxIntProperty("Y Position", "Y", posY));
     }
-
-    // 重写SetProperties：修复门移动时的引脚同步，与Canvas的属性编辑协同
     virtual void SetProperties(wxPropertyGrid* pg) override {
         wxVariant xVar = pg->GetPropertyValue("X");
         wxVariant yVar = pg->GetPropertyValue("Y");
@@ -609,22 +377,20 @@ public:
             int newX = static_cast<int>(xVar.GetLong());
             int newY = static_cast<int>(yVar.GetLong());
             SetPosition(newX, newY);
-            // 同步更新引脚位置（与基类SetPosition的引脚更新逻辑一致）
-            const int PIN_OFFSET = 20;
+            const int PIN_OFFSET = 40;
             if (type == TYPE_NOT) {
                 inputs[0]->SetPosition(newX - PIN_OFFSET, newY);
                 outputs[0]->SetPosition(newX + PIN_OFFSET, newY);
             }
             else {
-                inputs[0]->SetPosition(newX - PIN_OFFSET, newY - 10);
-                inputs[1]->SetPosition(newX - PIN_OFFSET, newY + 10);
+                inputs[0]->SetPosition(newX - PIN_OFFSET, newY - 20);
+                inputs[1]->SetPosition(newX - PIN_OFFSET, newY + 20);
                 outputs[0]->SetPosition(newX + PIN_OFFSET, newY);
             }
         }
     }
 
 private:
-    // 输入/输出引脚：与程序中InputOutput的std::unique_ptr<Pin>存储方式一致
     std::vector<std::unique_ptr<Pin>> inputs;
     std::vector<std::unique_ptr<Pin>> outputs;
 };
