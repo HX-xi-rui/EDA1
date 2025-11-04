@@ -1,18 +1,22 @@
+#pragma once
+#ifndef INPUTOUTPUT_H
+#define INPUTOUTPUT_H
+
 // 输入输出引脚类
 class InputOutput : public CircuitElement {
 public:
-    InputOutput(ElementType type, int x, int y, const wxString& name = "")
-        : CircuitElement(type, x, y), value(false), customName(name) {
-        if (type == TYPE_INPUT) {
-            pins.push_back(std::make_unique<Pin>(x + 20, y, false, this)); // 输出引脚
+    // 构造函数，接收元件类型、坐标位置和自定义名称
+    InputOutput(ElementType type, int x, int y, const wxString& name = "") : CircuitElement(type, x, y), value(false), customName(name) {  // 初始化基类和成员变量
+        // 根据类型创建引脚：输入元件在右侧有输出引脚，输出元件在左侧有输入引脚
+        if (type == TYPE_INPUT) {  // 如果是输入元件
+            pins.push_back(std::make_unique<Pin>(x + 20, y, false, this)); // 创建输出引脚（右侧）
         }
-        else {
-            pins.push_back(std::make_unique<Pin>(x - 20, y, true, this)); // 输入引脚
+        else {  // 如果是输出元件
+            pins.push_back(std::make_unique<Pin>(x - 20, y, true, this)); // 创建输入引脚（左侧）
         }
     }
 
-
-
+    // 绘制输入输出元件
     virtual void Draw(wxDC& dc) override {
         dc.SetPen(selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1));
         dc.SetBrush(value ? *wxGREEN_BRUSH : *wxWHITE_BRUSH);
@@ -102,7 +106,7 @@ public:
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
         dc.DrawCircle(circleCenter, circleRadius);
 
-        // 2. 绘制“0/1”文字（与圆形中心对齐，随圆形同步下移）
+        // 2. 绘制"0/1"文字（与圆形中心对齐，随圆形同步下移）
         dc.DrawText(
             valueText,
             circleCenter.x - textSize.GetWidth() / 2,
@@ -119,79 +123,119 @@ public:
         }
     }
 
+    // 更新元件状态
+    virtual void Update() override {
+        // 对于输入元件：把自身的value写到它的输出引脚（驱动信号）
+        if (type == TYPE_INPUT) {
+            if (!pins.empty()) {  // 确保有引脚
+                // pins[0]是输出引脚（构造时如此）
+                pins[0]->SetValue(value);  // 将输入元件的值设置到输出引脚
+            }
+        }
+        // 对于输出元件：从连接的输入引脚读值到自身value（显示/记录输出）
+        else if (type == TYPE_OUTPUT) {
+            if (!pins.empty()) {  // 确保有引脚
+                // pins[0]是输入引脚（构造时如此）
+                value = pins[0]->GetValue();  // 从输入引脚读取值
+            }
+        }
+    }
 
-
-    // 以下所有成员函数完全保留，无修改（确保功能兼容性）
-    virtual void Update() override { /* 输入输出元件不需要更新逻辑 */ }
+    // 设置元件值
     void SetValue(bool val) { value = val; }
+    // 获取元件值
     bool GetValue() const { return value; }
+    // 设置自定义名称
     void SetName(const wxString& name) { customName = name; }
+    // 获取自定义名称
     wxString GetCustomName() const { return customName; }
 
+    // 获取所有引脚指针
     virtual std::vector<Pin*> GetPins() override {
-        std::vector<Pin*> pinPtrs;
-        for (auto& pin : pins) {
-            pinPtrs.push_back(pin.get());
+        std::vector<Pin*> pinPtrs;  // 创建引脚指针向量
+        for (auto& pin : pins) {  // 遍历引脚容器
+            pinPtrs.push_back(pin.get());  // 添加原始指针
         }
-        return pinPtrs;
+        return pinPtrs;  // 返回引脚指针列表
     }
 
+    // 获取边界框
     virtual wxRect GetBoundingBox() const override {
-        // 同步更新包围盒（包含箭头，确保选中区域准确）
-        const int BODY_SIZE = 30;
-        const int ARROW_LEN = 8;
-        if (type == TYPE_INPUT) {
-            return wxRect(posX - BODY_SIZE / 2 - ARROW_LEN, posY - BODY_SIZE / 2, BODY_SIZE + ARROW_LEN, BODY_SIZE);
-        }
-        else {
-            return wxRect(posX - BODY_SIZE / 2, posY - BODY_SIZE / 2, BODY_SIZE + ARROW_LEN, BODY_SIZE);
-        }
+        return wxRect(posX - 15, posY - 15, 30, 30);  // 返回元件边界矩形
     }
 
-    virtual wxString GetName() const override { return type == TYPE_INPUT ? "INPUT" : "OUTPUT"; }
+    // 获取元件类型名称
+    virtual wxString GetName() const override {
+        return type == TYPE_INPUT ? "INPUT" : "OUTPUT";  // 返回类型字符串
+    }
+
+    // 获取显示名称
     virtual wxString GetDisplayName() const override {
-        if (!customName.empty()) return customName;
-        return type == TYPE_INPUT ? "Input Pin" : "Output Pin";
+        if (!customName.empty()) {  // 如果有自定义名称
+            return customName;  // 返回自定义名称
+        }
+        return type == TYPE_INPUT ? "Input Pin" : "Output Pin";  // 返回默认显示名称
     }
 
+    // 序列化元件数据
     virtual void Serialize(wxString& data) const override {
-        data += wxString::Format("%d,%d,%d,%d,%s,", type, posX, posY, value ? 1 : 0, customName);
+        wxString nameToSave = customName;
+        if (nameToSave.empty()) {
+            nameToSave = type == TYPE_INPUT ? "INPUT" : "OUTPUT";
+        }
+        // 不保存指针信息
+        data += wxString::Format("%d,%d,%d,%d,%s",
+            type, posX, posY, value ? 1 : 0, nameToSave);
     }
 
+    // 反序列化元件数据
     virtual void Deserialize(const wxString& data) override {
-        wxStringTokenizer tokenizer(data, ",");
-        if (tokenizer.CountTokens() >= 4) {
-            long typeVal, x, y, val;
-            tokenizer.GetNextToken().ToLong(&typeVal);
-            tokenizer.GetNextToken().ToLong(&x);
-            tokenizer.GetNextToken().ToLong(&y);
-            tokenizer.GetNextToken().ToLong(&val);
-            SetPosition(x, y);
-            value = val != 0;
-            if (tokenizer.HasMoreTokens()) customName = tokenizer.GetNextToken();
+        wxStringTokenizer tokenizer(data, ",");  // 创建字符串分词器
+        if (tokenizer.CountTokens() >= 4) {  // 检查是否有足够的数据
+            long typeVal, x, y, val;  // 定义解析变量
+            tokenizer.GetNextToken().ToLong(&typeVal);  // 解析类型
+            tokenizer.GetNextToken().ToLong(&x);  // 解析X坐标
+            tokenizer.GetNextToken().ToLong(&y);  // 解析Y坐标
+            tokenizer.GetNextToken().ToLong(&val);  // 解析值
+            SetPosition(x, y);  // 设置位置
+            value = val != 0;  // 设置布尔值
+
+            if (tokenizer.HasMoreTokens()) {  // 如果还有更多数据
+                customName = tokenizer.GetNextToken();  // 解析自定义名称
+            }
         }
     }
 
+    // 获取属性用于属性网格显示
     virtual void GetProperties(wxPropertyGrid* pg) const override {
-        pg->Append(new wxStringProperty("Type", "Type", GetDisplayName()));
-        pg->Append(new wxIntProperty("X Position", "X", posX));
-        pg->Append(new wxIntProperty("Y Position", "Y", posY));
-        pg->Append(new wxStringProperty("Name", "Name", customName));
-        pg->Append(new wxBoolProperty("Value", "Value", value));
+        pg->Append(new wxStringProperty("Type", "Type", GetDisplayName()));  // 类型属性
+        pg->Append(new wxIntProperty("X Position", "X", posX));  // X坐标属性
+        pg->Append(new wxIntProperty("Y Position", "Y", posY));  // Y坐标属性
+        pg->Append(new wxStringProperty("Name", "Name", customName));  // 名称属性
+        pg->Append(new wxBoolProperty("Value", "Value", value));  // 值属性
     }
 
+    // 从属性网格设置属性
     virtual void SetProperties(wxPropertyGrid* pg) override {
-        wxVariant xVar = pg->GetPropertyValue("X");
-        wxVariant yVar = pg->GetPropertyValue("Y");
-        wxVariant nameVar = pg->GetPropertyValue("Name");
-        wxVariant valueVar = pg->GetPropertyValue("Value");
-        if (xVar.IsType("long") && yVar.IsType("long")) SetPosition(xVar.GetLong(), yVar.GetLong());
-        if (nameVar.IsType("string")) customName = nameVar.GetString();
-        if (valueVar.IsType("bool")) value = valueVar.GetBool();
+        wxVariant xVar = pg->GetPropertyValue("X");  // 获取X坐标值
+        wxVariant yVar = pg->GetPropertyValue("Y");  // 获取Y坐标值
+        wxVariant nameVar = pg->GetPropertyValue("Name");  // 获取名称值
+        wxVariant valueVar = pg->GetPropertyValue("Value");  // 获取布尔值
+
+        if (xVar.IsType("long") && yVar.IsType("long")) {  // 检查坐标类型
+            SetPosition(xVar.GetLong(), yVar.GetLong());  // 设置新位置
+        }
+        if (nameVar.IsType("string")) {  // 检查名称类型
+            customName = nameVar.GetString();  // 设置新名称
+        }
+        if (valueVar.IsType("bool")) {  // 检查值类型
+            value = valueVar.GetBool();  // 设置新值
+        }
     }
 
 private:
-    std::vector<std::unique_ptr<Pin>> pins;
-    bool value;
-    wxString customName;
+    std::vector<std::unique_ptr<Pin>> pins; // 引脚列表（智能指针管理）
+    bool value;  // 元件当前值
+    wxString customName; // 自定义名称
 };
+#endif 
