@@ -1,4 +1,12 @@
-// 元件树控件类（AND门用24×24px自定义AND.png图标）
+#pragma once
+#ifndef ELEMENTTREECTRL_H
+#define ELEMENTTREECTRL_H
+
+#include <wx/treectrl.h>                // 树形控件
+#include <wx/artprov.h>                 // 图标资源
+#include <map>                      
+
+// 元件树控件类
 class ElementTreeCtrl : public wxTreeCtrl {
 public:
     // 构造函数：接收父窗口和画布指针
@@ -8,7 +16,7 @@ public:
         canvas(canvas), imageList(nullptr),
         // 初始化图标索引（-1表示无效）
         iconIndex_FileOpen(-1), iconIndex_GateOthers(-1),
-        iconIndex_AND(-1), iconIndex_Clock(-1), iconIndex_IN(-1), iconIndex_OUT(-1),iconIndex_OR(-1), iconIndex_XOR(-1), iconIndex_NOR(-1), iconIndex_NOT(-1), iconIndex_NAND(-1)
+        iconIndex_AND(-1), iconIndex_Clock(-1), iconIndex_IN(-1), iconIndex_OUT(-1), iconIndex_OR(-1), iconIndex_XOR(-1), iconIndex_NOR(-1), iconIndex_NOT(-1), iconIndex_NAND(-1)
     {
         // 1. 初始化图标列表（24×24px，适配自定义AND.png）
         InitImageList();
@@ -58,7 +66,7 @@ private:
         imageList = new wxImageList(24, 24, true, 5); // 预留5个图标位置
 
         // -------------------------- 1. 加载自定义AND.png图标（24×24px） --------------------------
-        wxString andImgPath = "AND.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString andImgPath = "images/AND.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_AND;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(andImgPath)) {
@@ -68,7 +76,7 @@ private:
         iconIndex_AND = imageList->Add(bmp_AND.IsOk() ? bmp_AND : CreateEmptyBitmap(24, 24));
 
 
-        wxString nandImgPath = "NAND.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString nandImgPath = "images/NAND.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_NAND;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(nandImgPath)) {
@@ -78,7 +86,7 @@ private:
         iconIndex_NAND = imageList->Add(bmp_NAND.IsOk() ? bmp_NAND : CreateEmptyBitmap(24, 24));
 
 
-        wxString orImgPath = "OR.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString orImgPath = "images/OR.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_OR;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(orImgPath)) {
@@ -87,7 +95,7 @@ private:
         // 加载失败时用备用图标
         iconIndex_OR = imageList->Add(bmp_OR.IsOk() ? bmp_OR : CreateEmptyBitmap(24, 24));
 
-        wxString xorImgPath = "XOR.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString xorImgPath = "images/XOR.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_XOR;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(xorImgPath)) {
@@ -97,7 +105,7 @@ private:
         iconIndex_XOR = imageList->Add(bmp_XOR.IsOk() ? bmp_XOR : CreateEmptyBitmap(24, 24));
 
 
-        wxString norImgPath = "NOR.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString norImgPath = "images/NOR.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_NOR;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(norImgPath)) {
@@ -107,7 +115,7 @@ private:
         iconIndex_NOR = imageList->Add(bmp_NOR.IsOk() ? bmp_NOR : CreateEmptyBitmap(24, 24));
 
 
-        wxString notImgPath = "NOT.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString notImgPath = "images/NOT.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_NOT;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(notImgPath)) {
@@ -117,7 +125,7 @@ private:
         iconIndex_NOT = imageList->Add(bmp_NOT.IsOk() ? bmp_NOT : CreateEmptyBitmap(24, 24));
 
 
-        wxString outImgPath = "OUTPUT.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString outImgPath = "images/OUTPUT.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_OUT;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(outImgPath)) {
@@ -127,7 +135,7 @@ private:
         iconIndex_OUT = imageList->Add(bmp_OUT.IsOk() ? bmp_OUT : CreateEmptyBitmap(24, 24));
 
 
-        wxString inImgPath = "INPUT.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxString inImgPath = "images/INPUT.png"; // 图片路径（需与exe同目录，或写绝对路径）
         wxBitmap bmp_IN;
         // 检查图片文件是否存在
         if (wxFileName::FileExists(inImgPath)) {
@@ -299,7 +307,7 @@ private:
             else if (IsSequentialType(elem->GetType())) {
                 targetIconIndex = iconIndex_Clock; // 时序元件 → 时钟图标
             }
-            else if (elem->GetType() == TYPE_INPUT ) {
+            else if (elem->GetType() == TYPE_INPUT) {
                 targetIconIndex = iconIndex_IN; // 输入输出 → IO图标
             }
             else if (elem->GetType() == TYPE_OUTPUT) {
@@ -446,7 +454,7 @@ private:
     int iconIndex_Clock;       // 时钟/时序元件图标
     int iconIndex_IN;
     int iconIndex_OUT;
-	int iconIndex_IO;
+    int iconIndex_IO;
     // 输入输出图标
     // 树节点
     wxTreeItemId root;                               // 根节点（隐藏）
@@ -460,3 +468,4 @@ private:
     std::map<wxTreeItemId, CircuitElement*> elementMap; // 节点→实际元件映射
     std::map<wxTreeItemId, Wire*> wireMap;           // 节点→实际导线映射
 };
+#endif
