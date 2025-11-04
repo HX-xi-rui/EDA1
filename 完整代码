@@ -1,3 +1,4 @@
+
 #include <wx/wx.h>                    // wxWidgets主头文件
 #include <wx/dcbuffer.h>              // 双缓冲绘图
 #include <wx/filedlg.h>               // 文件对话框
@@ -17,7 +18,7 @@
 #include <set>                        // 集合容器
 #include <wx/treectrl.h>              // 树形控件
 
-// 前向声明 - 避免循环依赖
+// 前向声明
 class CircuitElement;
 class Gate;
 class Wire;
@@ -51,9 +52,9 @@ enum ElementType {
 class Pin {
 public:
     // 构造函数：初始化引脚位置、类型和父元素
-    Pin(int x, int y, bool isInput, CircuitElement* parent)
+    Pin(int x, int y, bool isInput, CircuitElement* parent, bool isVirtual = false)
         : posX(x), posY(y), input(isInput), value(false),
-        connectedWire(nullptr), parentElement(parent) {
+        connectedWire(nullptr), parentElement(parent), virtualPin(isVirtual) {
     }
 
     // Getter方法 - 获取引脚属性
@@ -61,6 +62,7 @@ public:
     int GetY() const { return posY; }
     bool IsInput() const { return input; }
     bool GetValue() const { return value; }
+    bool IsVirtual() const { return virtualPin; }
 
     // Setter方法 - 设置引脚属性  
     void SetValue(bool val) { value = val; }
@@ -84,6 +86,7 @@ private:
     bool value;               // 逻辑值(true=1, false=0)
     Wire* connectedWire;      // 连接的导线
     CircuitElement* parentElement; // 所属的电路元件
+    bool virtualPin;          // 新增：是否为虚拟引脚
 };
 
 // 电路元素基类
@@ -1135,7 +1138,7 @@ public:
             // 3. 绘制三角形主体（修正方向，直角在右）
             dc.SetPen(selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1));
             dc.SetBrush(*wxWHITE_BRUSH);
-            dc.DrawPolygon(3, triVertices); // 按“右顶点→上顶点→下顶点”顺序绘制，确保三角形方向正确
+            dc.DrawPolygon(3, triVertices); // 按"右顶点→上顶点→下顶点"顺序绘制，确保三角形方向正确
 
             // 4. 绘制输入引脚（与三角形左侧斜边中点衔接）
             wxPoint inputPin(posX - GATE_WIDTH / 2, posY); // 输入引脚起点（左侧斜边中点）
@@ -1689,7 +1692,7 @@ public:
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
         dc.DrawCircle(circleCenter, circleRadius);
 
-        // 2. 绘制“0/1”文字（与圆形中心对齐，随圆形同步下移）
+        // 2. 绘制"0/1"文字（与圆形中心对齐，随圆形同步下移）
         dc.DrawText(
             valueText,
             circleCenter.x - textSize.GetWidth() / 2,
@@ -1828,12 +1831,18 @@ public:
     // 构造函数，接收起始引脚和结束引脚
     Wire(Pin* start, Pin* end) : startPin(start), endPin(end) {
         // 建立双向连接：将导线对象设置到两个引脚中
-        start->SetConnectedWire(this);
-        end->SetConnectedWire(this);
+        if (start && !start->IsVirtual()) {
+            start->SetConnectedWire(this);
+        }
+        if (end && !end->IsVirtual()) {
+            end->SetConnectedWire(this);
+        }
     }
 
     // 绘制导线
     void Draw(wxDC& dc) {
+        if (!startPin || !endPin) return;
+
         // 根据信号值选择颜色：绿色=1（高电平），红色=0（低电平）
         bool value = startPin->GetValue();  // 获取起始引脚的值
         dc.SetPen(value ? wxPen(*wxGREEN, 2) : wxPen(*wxRED, 2));  // 设置画笔颜色和宽度
@@ -1906,6 +1915,11 @@ public:
         }
     }
 
+    // 检查导线是否包含虚拟引脚
+    bool HasVirtualPin() const {
+        return (startPin && startPin->IsVirtual()) || (endPin && endPin->IsVirtual());
+    }
+
 private:
     Pin* startPin;  // 起始引脚指针
     Pin* endPin;    // 结束引脚指针
@@ -1920,7 +1934,8 @@ public:
         startPin(nullptr), simulating(false), showGrid(true), zoomLevel(1.0),
         autoPlaceMode(false), autoPlaceType(TYPE_SELECT),
         virtualSize(2000, 2000), isRestoringState(false),
-        pasteOffset(0, 0), pasteCount(0), selectedWire(nullptr) {  // 新增初始化
+        pasteOffset(0, 0), pasteCount(0), selectedWire(nullptr),
+        connectionScrollPos(0), maxConnectionWidth(0) {  // 新增滚动相关变量
 
         // 设置滚动条
         SetScrollRate(10, 10);  // 设置滚动步长
@@ -1954,20 +1969,64 @@ public:
             wxFrame* frame = static_cast<wxFrame*>(topWindow);
             wxStatusBar* statusBar = frame->GetStatusBar();
             if (statusBar) {
+                wxString connectionInfo;
                 if (selectedElement) {
-                    wxString connectionInfo = GetSelectedElementConnectionInfo();
-                    statusBar->SetStatusText(connectionInfo, 0);
+                    connectionInfo = GetSelectedElementConnectionInfo();
                 }
                 else if (selectedWire) {
-                    statusBar->SetStatusText("Wire selected - connects " +
+                    connectionInfo = "Wire selected - connects " +
                         GetPinInfo(selectedWire->GetStartPin()) + " to " +
-                        GetPinInfo(selectedWire->GetEndPin()), 0);
+                        GetPinInfo(selectedWire->GetEndPin());
                 }
                 else {
-                    statusBar->SetStatusText("Ready", 0);
+                    connectionInfo = "Ready";
+                }
+
+                // 计算连接信息的宽度
+                wxClientDC dc(statusBar);
+                dc.SetFont(statusBar->GetFont());
+                wxSize textSize = dc.GetTextExtent(connectionInfo);
+                maxConnectionWidth = textSize.GetWidth();
+
+                // 应用滚动位置
+                if (maxConnectionWidth > 400) { // 如果文本宽度超过状态栏宽度
+                    if (connectionScrollPos > maxConnectionWidth - 400) {
+                        connectionScrollPos = maxConnectionWidth - 400;
+                    }
+                    if (connectionScrollPos < 0) {
+                        connectionScrollPos = 0;
+                    }
+
+                    // 显示滚动后的文本
+                    statusBar->SetStatusText(connectionInfo.Mid(connectionScrollPos / 8), 0);
+
+                    // 在状态栏显示滚动提示
+                    statusBar->SetStatusText("← Scroll →", 1);
+                }
+                else {
+                    statusBar->SetStatusText(connectionInfo, 0);
+                    statusBar->SetStatusText("", 1); // 清除滚动提示
+                    connectionScrollPos = 0; // 重置滚动位置
                 }
             }
         }
+    }
+
+    // 处理连接信息滚动
+    void ScrollConnectionInfo(int direction) {
+        if (maxConnectionWidth <= 400) return; // 不需要滚动
+
+        connectionScrollPos += direction * 20; // 每次滚动20像素
+
+        // 限制滚动范围
+        if (connectionScrollPos < 0) {
+            connectionScrollPos = 0;
+        }
+        if (connectionScrollPos > maxConnectionWidth - 400) {
+            connectionScrollPos = maxConnectionWidth - 400;
+        }
+
+        UpdateStatusBar();
     }
 
     // 辅助函数：获取引脚信息
@@ -1978,6 +2037,7 @@ public:
 
         return parent->GetDisplayName() + " (" + (pin->IsInput() ? "input" : "output") + ")";
     }
+
     void NotifyStateChange() {
         wxWindow* topWindow = wxGetTopLevelParent(this);
         if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
@@ -1998,6 +2058,8 @@ public:
         if (selectedElement) {
             selectedElement->SetSelected(true);
         }
+        connectionScrollPos = 0; // 重置滚动位置
+        UpdateStatusBar();
     }
 
     // 删除选中的导线
@@ -2047,27 +2109,22 @@ public:
                 Refresh();
 
                 // 更新状态栏
-                wxWindow* topWindow = wxGetTopLevelParent(this);
-                if (topWindow) {
-                    wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-                    if (statusBar) {
-                        statusBar->SetStatusText("Wire deleted");
-                    }
-                }
+                UpdateStatusBar();
             }
         }
     }
+
     wxString GetSelectedElementConnectionInfo() const {
         if (!selectedElement) return "No element selected";
 
         wxString info;
-        info << "Selected: " << selectedElement->GetDisplayName() << "\n";
+        info << "Selected: " << selectedElement->GetDisplayName() << " | ";
 
         // 获取所有引脚
         auto pins = selectedElement->GetPins();
 
         // 分析输入连接（上一个门）
-        info << "Previous gates: ";
+        info << "Inputs from: ";
         bool hasPrevious = false;
         for (auto pin : pins) {
             if (pin->IsInput()) {
@@ -2085,7 +2142,7 @@ public:
         if (!hasPrevious) info << "None";
 
         // 分析输出连接（下一个门）
-        info << "\nNext gates: ";
+        info << " | Outputs to: ";
         bool hasNext = false;
         for (auto pin : pins) {
             if (!pin->IsInput()) {
@@ -2104,6 +2161,7 @@ public:
 
         return info;
     }
+
     // 检查是否有选中的导线
     bool HasSelectedWire() const { return selectedWire != nullptr; }
 
@@ -2188,22 +2246,15 @@ public:
 
         // 清除选中状态
         selectedElement = nullptr;
+        connectionScrollPos = 0; // 重置滚动位置
 
         // 更新电路状态
         UpdateCircuit();
         Refresh();
 
         // 更新状态栏
-        wxWindow* topWindow = wxGetTopLevelParent(this);
-        if (topWindow) {
-            wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-            if (statusBar) {
-                statusBar->SetStatusText(wxString::Format("Deleted %zu selected elements", elementsToDelete.size()));
-            }
-        }
+        UpdateStatusBar();
     }
-
-
 
     // 在指定位置创建元件，支持时序元件
     void CreateElementAtPosition(ElementType type, const wxPoint& pos) {
@@ -2319,8 +2370,6 @@ public:
         Refresh();  // 刷新显示
     }
 
-
-
     // 开始仿真
     void StartSimulation() {
         simulating = true;
@@ -2411,11 +2460,14 @@ public:
     void Clear() {
         elements.clear();  // 清空元件
         wires.clear();     // 清空导线
+        virtualPins.clear(); // 新增：清空虚拟引脚
         selectedElement = nullptr;  // 清除选中
         startPin = nullptr;         // 清除连线起始引脚
         autoPlaceMode = false;      // 关闭自动放置模式
         undoStack.clear();          // 清空撤销栈
         redoStack.clear();          // 清空重做栈
+        connectionScrollPos = 0;    // 重置滚动位置
+        maxConnectionWidth = 0;     // 重置最大宽度
         Refresh();  // 刷新显示
     }
 
@@ -2539,7 +2591,6 @@ public:
         return false;
     }
 
-
     // 切换网格显示
     void ToggleGrid() {
         showGrid = !showGrid;
@@ -2648,13 +2699,7 @@ public:
         NotifyStateChange(); // 新增：通知状态改变
 
         // 更新状态栏
-        wxWindow* topWindow = wxGetTopLevelParent(this);
-        if (topWindow) {
-            wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-            if (statusBar) {
-                statusBar->SetStatusText("Undo performed");
-            }
-        }
+        UpdateStatusBar();
     }
 
     void Redo() {
@@ -2678,13 +2723,7 @@ public:
         NotifyStateChange(); // 新增：通知状态改变
 
         // 更新状态栏
-        wxWindow* topWindow = wxGetTopLevelParent(this);
-        if (topWindow) {
-            wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-            if (statusBar) {
-                statusBar->SetStatusText("Redo performed");
-            }
-        }
+        UpdateStatusBar();
     }
 
     void ClearHistory() {
@@ -2714,13 +2753,7 @@ public:
 
         if (!clipboard.empty()) {
             // 更新状态栏
-            wxWindow* topWindow = wxGetTopLevelParent(this);
-            if (topWindow) {
-                wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-                if (statusBar) {
-                    statusBar->SetStatusText(wxString::Format("Copied %zu elements", clipboard.size()));
-                }
-            }
+            UpdateStatusBar();
         }
     }
 
@@ -2772,13 +2805,7 @@ public:
         Refresh();
 
         // 更新状态栏
-        wxWindow* topWindow = wxGetTopLevelParent(this);
-        if (topWindow) {
-            wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-            if (statusBar) {
-                statusBar->SetStatusText(wxString::Format("Pasted %zu elements", clipboard.size()));
-            }
-        }
+        UpdateStatusBar();
     }
 
     void SelectAllElements() {
@@ -2792,17 +2819,10 @@ public:
         Refresh();
 
         // 更新状态栏
-        wxWindow* topWindow = wxGetTopLevelParent(this);
-        if (topWindow) {
-            wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-            if (statusBar) {
-                statusBar->SetStatusText(wxString::Format("Selected all %zu elements", elements.size()));
-            }
-        }
+        UpdateStatusBar();
     }
 
     // 检查是否有选中的元件
-  // 检查是否有选中的元件（包括单个选中和多选）
     bool HasSelectedElements() const {
         for (auto& element : elements) {
             if (element->IsSelected()) {
@@ -2811,7 +2831,10 @@ public:
         }
         return false;
     }
-    bool HasOneSelectedElement()const { if (selectedElement) return true; }
+
+    bool HasOneSelectedElement() const {
+        return selectedElement != nullptr;
+    }
 
     // 删除选中元件
     void DeleteSelectedElement() {
@@ -2872,6 +2895,7 @@ public:
 
                 // 清除选中状态
                 selectedElement = nullptr;
+                connectionScrollPos = 0; // 重置滚动位置
 
                 // 新增：更新状态栏清除显示
                 UpdateStatusBar();
@@ -2879,15 +2903,6 @@ public:
                 // 更新电路状态
                 UpdateCircuit();
                 Refresh();
-
-                // 更新状态栏
-                wxWindow* topWindow = wxGetTopLevelParent(this);
-                if (topWindow) {
-                    wxStatusBar* statusBar = static_cast<wxFrame*>(topWindow)->GetStatusBar();
-                    if (statusBar) {
-                        statusBar->SetStatusText("Element deleted");
-                    }
-                }
             }
         }
     }
@@ -2897,12 +2912,108 @@ public:
     // 获取自动放置类型
     ElementType GetAutoPlaceType() const { return autoPlaceType; }
 
+    // 新增：在导线上查找最近的点
+    wxPoint FindNearestPointOnWire(const wxPoint& pos) const {
+        double minDistance = std::numeric_limits<double>::max();
+        wxPoint nearestPoint = pos;
+
+        for (auto& wire : wires) {
+            Pin* startPin = wire->GetStartPin();
+            Pin* endPin = wire->GetEndPin();
+            if (!startPin || !endPin) continue;
+
+            int x1 = startPin->GetX(), y1 = startPin->GetY();
+            int x2 = endPin->GetX(), y2 = endPin->GetY();
+
+            // 计算点到线段的最近点
+            double A = pos.x - x1;
+            double B = pos.y - y1;
+            double C = x2 - x1;
+            double D = y2 - y1;
+
+            double dot = A * C + B * D;
+            double len_sq = C * C + D * D;
+            double param = (len_sq != 0) ? dot / len_sq : -1;
+
+            double xx, yy;
+
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            }
+            else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            }
+            else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+
+            double dx = pos.x - xx;
+            double dy = pos.y - yy;
+            double distance = std::sqrt(dx * dx + dy * dy);
+
+            if (distance < minDistance && distance < 10) { // 10像素范围内
+                minDistance = distance;
+                nearestPoint = wxPoint(static_cast<int>(xx), static_cast<int>(yy));
+            }
+        }
+
+        return nearestPoint;
+    }
+
+    // 新增：检查点是否在导线上
+    Wire* FindWireAtPosition(const wxPoint& pos) const {
+        for (auto& wire : wires) {
+            if (wire->ContainsPoint(pos)) {
+                return wire.get();
+            }
+        }
+        return nullptr;
+    }
+
+    // 新增：创建连接到导线的连接点
+    void CreateWireToWireConnection(Pin* startPin, const wxPoint& wirePoint, Wire* targetWire) {
+        if (!startPin || !targetWire) return;
+
+        // 创建虚拟引脚（输入引脚）
+        auto virtualPin = std::make_unique<Pin>(wirePoint.x, wirePoint.y, true, nullptr, true);
+        Pin* virtualPinPtr = virtualPin.get();
+        virtualPins.push_back(std::move(virtualPin));
+
+        // 创建从引脚到虚拟引脚的连接
+        wires.push_back(std::make_unique<Wire>(startPin, virtualPinPtr));
+
+        // 记录操作
+        if (!isRestoringState) {
+            wxString serializedData = SerializeWire(wires.back().get());
+            auto operation = std::make_unique<AddWireOperation>(serializedData);
+            undoStack.push_back(std::move(operation));
+
+            if (undoStack.size() > MAX_HISTORY) {
+                undoStack.erase(undoStack.begin());
+            }
+            redoStack.clear();
+            UpdateUndoRedoStatus();
+        }
+
+        UpdateCircuit();
+        Refresh();
+    }
+
 private:
     // 复制粘贴相关成员变量
     std::vector<std::unique_ptr<CircuitElement>> clipboard;  // 剪贴板
     wxPoint pasteOffset;                                     // 粘贴偏移量
     int pasteCount;                                          // 粘贴计数
 
+    // 虚拟引脚管理
+    std::vector<std::unique_ptr<Pin>> virtualPins;           // 虚拟引脚容器
+
+    // 连接信息滚动相关变量
+    int connectionScrollPos;     // 连接信息滚动位置
+    int maxConnectionWidth;      // 连接信息最大宽度
 
     // 从序列化数据创建元件
     std::unique_ptr<CircuitElement> CreateElementFromData(const wxString& data) {
@@ -2981,10 +3092,6 @@ private:
         OP_MOVE_ELEMENT,
         OP_CHANGE_VALUE
     };
-
-
-
-
 
     // 操作基类，定义撤销/重做接口
     class Operation {
@@ -3217,6 +3324,32 @@ private:
             });
 
         if (it != wires.end()) {
+            // 如果导线包含虚拟引脚，也需要清理虚拟引脚
+            if (wire->HasVirtualPin()) {
+                Pin* startPin = wire->GetStartPin();
+                Pin* endPin = wire->GetEndPin();
+
+                // 清理虚拟引脚
+                if (startPin && startPin->IsVirtual()) {
+                    auto pinIt = std::find_if(virtualPins.begin(), virtualPins.end(),
+                        [startPin](const std::unique_ptr<Pin>& p) {
+                            return p.get() == startPin;
+                        });
+                    if (pinIt != virtualPins.end()) {
+                        virtualPins.erase(pinIt);
+                    }
+                }
+                if (endPin && endPin->IsVirtual()) {
+                    auto pinIt = std::find_if(virtualPins.begin(), virtualPins.end(),
+                        [endPin](const std::unique_ptr<Pin>& p) {
+                            return p.get() == endPin;
+                        });
+                    if (pinIt != virtualPins.end()) {
+                        virtualPins.erase(pinIt);
+                    }
+                }
+            }
+
             wires.erase(it);
         }
 
@@ -3254,8 +3387,6 @@ private:
         }
         this->startPin = nullptr;
     }
-
-    // === 原有的私有方法 ===
 
     // 从序列化数据创建元件
     void CreateElementFromSerializedData(const wxString& data) {
@@ -3387,7 +3518,7 @@ private:
             }
         }
     }
-    Wire* selectedWire;                   // 当前选中的导线
+
     // 原有的私有成员变量
     ElementType currentTool;      // 当前工具类型
     bool wiringMode;              // 是否处于连线模式
@@ -3404,7 +3535,7 @@ private:
     wxSize virtualSize;           // 虚拟画布大小
     std::vector<std::unique_ptr<CircuitElement>> elements;  // 元件列表
     std::vector<std::unique_ptr<Wire>> wires;               // 导线列表
-
+    Wire* selectedWire;           // 当前选中的导线
 
     // 绘制事件处理
     void OnPaint(wxPaintEvent& event) {
@@ -3509,6 +3640,13 @@ private:
             DrawAutoPlacePreview(dc, lastMousePos);
         }
 
+        // 可选：绘制虚拟引脚作为视觉指示
+        dc.SetPen(wxPen(*wxBLUE, 1, wxPENSTYLE_DOT));
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+        for (auto& vpin : virtualPins) {
+            dc.DrawCircle(vpin->GetX(), vpin->GetY(), 4);
+        }
+
         dc.SetUserScale(1.0, 1.0);  // 恢复原始缩放
 
         // 绘制状态信息
@@ -3523,6 +3661,11 @@ private:
             // 显示当前视图位置和缩放信息
             wxString viewInfo = wxString::Format("View: (%d,%d) Zoom: %.0f%%", startX, startY, zoomLevel * 100);
             dc.DrawText(viewInfo, 10, 30);
+
+            // 显示连接信息滚动提示
+            if (maxConnectionWidth > 400) {
+                dc.DrawText("Use ← → to scroll connection info", 10, 50);
+            }
         }
         else {
             dc.SetTextForeground(*wxRED);
@@ -3571,6 +3714,7 @@ private:
         if (selectedWire) {
             selectedWire = nullptr;
         }
+
         // 如果是显示真值工具模式，优先处理输入元件点击
         if (currentTool == TYPE_TOGGLE_VALUE) {
             if (TryToggleInputElement(pos)) {
@@ -3612,9 +3756,12 @@ private:
                 }
             }
 
+            // 重置滚动位置
+            connectionScrollPos = 0;
             // 新增：更新状态栏显示连接信息
             UpdateStatusBar();
         }
+
         if (currentTool == TYPE_SELECT || currentTool == TYPE_TOGGLE_VALUE) {
             selectedElement = nullptr;
             // 从后向前遍历（处理重叠元件）
@@ -3639,17 +3786,18 @@ private:
                 }
             }
 
+            // 重置滚动位置
+            connectionScrollPos = 0;
             // 新增：更新状态栏显示连接信息
             UpdateStatusBar();
         }
-
         else if (currentTool == TYPE_TOGGLE_VALUE) {
             if (TryToggleInputElement(pos)) {
                 Refresh();
                 return;
             }
         }
-        // 在 OnLeftDown 方法中找到这个部分：
+        // 修改连线模式的处理
         else if (wiringMode) {
             // 连线模式：处理引脚连接
             Pin* pin = FindPinAt(pos);
@@ -3667,7 +3815,17 @@ private:
                 }
             }
             else if (startPin != nullptr) {
-                startPin = nullptr;  // 点击空白处重置起始引脚
+                // 检查是否点击在导线上
+                Wire* wire = FindWireAtPosition(pos);
+                if (wire) {
+                    // 在导线上创建连接点
+                    wxPoint wirePoint = FindNearestPointOnWire(pos);
+                    CreateWireToWireConnection(startPin, wirePoint, wire);
+                    startPin = nullptr;
+                }
+                else {
+                    startPin = nullptr;  // 点击空白处重置起始引脚
+                }
             }
         }
         else {
@@ -3807,6 +3965,8 @@ private:
                 }
             }
 
+            // 重置滚动位置
+            connectionScrollPos = 0;
             // 新增：更新状态栏显示连接信息
             UpdateStatusBar();
         }
@@ -3850,6 +4010,13 @@ private:
                 ZoomOut();
             }
         }
+        else if (event.ShiftDown()) {
+            // Shift+滚轮：水平滚动连接信息
+            if (maxConnectionWidth > 400) {
+                int direction = event.GetWheelRotation() > 0 ? -1 : 1;
+                ScrollConnectionInfo(direction);
+            }
+        }
         else {
             // 普通滚轮：滚动
             event.Skip();  // 让父类处理滚动
@@ -3863,6 +4030,28 @@ private:
         wxSize clientSize = GetClientSize();
 
         switch (event.GetKeyCode()) {
+        case WXK_LEFT:
+            if (event.ShiftDown() && maxConnectionWidth > 400) {
+                // Shift+左箭头：向左滚动连接信息
+                ScrollConnectionInfo(-1);
+            }
+            else {
+                // 普通左箭头：向左滚动视图
+                Scroll(vx - 1, vy);
+                Refresh();
+            }
+            break;
+        case WXK_RIGHT:
+            if (event.ShiftDown() && maxConnectionWidth > 400) {
+                // Shift+右箭头：向右滚动连接信息
+                ScrollConnectionInfo(1);
+            }
+            else {
+                // 普通右箭头：向右滚动视图
+                Scroll(vx + 1, vy);
+                Refresh();
+            }
+            break;
         case WXK_DELETE:
             // 优先删除选中的导线
             if (HasSelectedWire()) {
@@ -3917,15 +4106,6 @@ private:
             if (event.ControlDown()) {
                 PasteElements(); // Ctrl+V 粘贴
             }
-            break;
-            // 添加键盘滚动支持
-        case WXK_LEFT:
-            Scroll(vx - 1, vy);
-            Refresh();
-            break;
-        case WXK_RIGHT:
-            Scroll(vx + 1, vy);
-            Refresh();
             break;
         case WXK_UP:
             Scroll(vx, vy - 1);
@@ -4030,229 +4210,469 @@ private:
         );
         SetScrollRate(20 * zoomLevel, 20 * zoomLevel);
     }
-
 };
 
-// 元件树控件类 
+// 元件树控件类
 class ElementTreeCtrl : public wxTreeCtrl {
 public:
-    // 构造函数，接收父窗口和电路画布指针
+    // 构造函数：接收父窗口和画布指针
     ElementTreeCtrl(wxWindow* parent, CircuitCanvas* canvas)
         : wxTreeCtrl(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-            wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT | wxTR_SINGLE),  // 树控件样式：默认样式、隐藏根节点、单选
-        canvas(canvas) {  // 初始化画布指针
-
-        // 创建根节点（隐藏）
-        root = AddRoot("Circuit Elements");
-
-        // 创建分类节点
-        gatesNode = AppendItem(root, "Logic Gates");  // 逻辑门分类
-        sequentialNode = AppendItem(root, "Sequential Elements"); // 新增时序元件分类
-        ioNode = AppendItem(root, "Input/Output");    // 输入输出分类
-        wiresNode = AppendItem(root, "Wires");        // 导线分类
-
-        // 初始化工具映射
-        InitializeToolMap();
-
-        // 展开所有节点
+            wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT | wxTR_SINGLE),
+        canvas(canvas), imageList(nullptr),
+        // 初始化图标索引（-1表示无效）
+        iconIndex_FileOpen(-1), iconIndex_GateOthers(-1),
+        iconIndex_AND(-1), iconIndex_Clock(-1), iconIndex_IN(-1), iconIndex_OUT(-1), iconIndex_OR(-1), iconIndex_XOR(-1), iconIndex_NOR(-1), iconIndex_NOT(-1), iconIndex_NAND(-1)
+    {
+        // 1. 初始化图标列表（24×24px，适配自定义AND.png）
+        InitImageList();
+        // 2. 创建树节点结构（根节点+分类节点）
+        CreateTreeStructure();
+        // 3. 更新树内容（设置图标+添加节点）
+        UpdateTree();
+        // 4. 展开所有节点
         ExpandAll();
+        // 5. 绑定事件
+        BindEvents();
+    }
 
-        // 绑定事件
-        Bind(wxEVT_TREE_SEL_CHANGED, &ElementTreeCtrl::OnSelectionChanged, this);  // 选择改变事件
-        Bind(wxEVT_TREE_ITEM_ACTIVATED, &ElementTreeCtrl::OnItemActivated, this);  // 项目激活事件（双击）
+    // 析构函数：释放图标列表内存
+    ~ElementTreeCtrl() {
+        if (imageList != nullptr) {
+            delete imageList;
+        }
     }
 
     // 更新树控件内容
     void UpdateTree() {
-        // 清除现有元素节点（保留分类节点）
-        DeleteChildren(gatesNode);        // 清空逻辑门节点
-        DeleteChildren(sequentialNode);   // 清空时序元件节点
-        DeleteChildren(ioNode);           // 清空输入输出节点
-        DeleteChildren(wiresNode);        // 清空导线节点
+        // 清除现有子节点
+        ClearAllChildNodes();
 
-        // 添加逻辑门工具项
-        wxTreeItemId andItem = AppendItem(gatesNode, "AND Gate");  // AND门
-        toolMap[andItem] = TYPE_AND;  // 映射到AND门类型
-
-        wxTreeItemId orItem = AppendItem(gatesNode, "OR Gate");    // OR门
-        toolMap[orItem] = TYPE_OR;    // 映射到OR门类型
-
-        wxTreeItemId notItem = AppendItem(gatesNode, "NOT Gate");  // NOT门
-        toolMap[notItem] = TYPE_NOT;  // 映射到NOT门类型
-
-        wxTreeItemId xorItem = AppendItem(gatesNode, "XOR Gate");  // XOR门
-        toolMap[xorItem] = TYPE_XOR;  // 映射到XOR门类型
-
-        wxTreeItemId nandItem = AppendItem(gatesNode, "NAND Gate");  // NAND门
-        toolMap[nandItem] = TYPE_NAND;  // 映射到NAND门类型
-
-        wxTreeItemId norItem = AppendItem(gatesNode, "NOR Gate");    // NOR门
-        toolMap[norItem] = TYPE_NOR;    // 映射到NOR门类型
-
-        // 添加时序元件工具项
-        wxTreeItemId clockItem = AppendItem(sequentialNode, "Clock");  // 时钟元件
-        toolMap[clockItem] = TYPE_CLOCK;  // 映射到时钟类型
-
-        wxTreeItemId rsffItem = AppendItem(sequentialNode, "RS Flip-Flop");  // RS触发器
-        toolMap[rsffItem] = TYPE_RS_FLIPFLOP;  // 映射到RS触发器类型
-
-        wxTreeItemId dffItem = AppendItem(sequentialNode, "D Flip-Flop");  // D触发器
-        toolMap[dffItem] = TYPE_D_FLIPFLOP;  // 映射到D触发器类型
-
-        wxTreeItemId jkffItem = AppendItem(sequentialNode, "JK Flip-Flop");  // JK触发器
-        toolMap[jkffItem] = TYPE_JK_FLIPFLOP;  // 映射到JK触发器类型
-
-        wxTreeItemId tffItem = AppendItem(sequentialNode, "T Flip-Flop");    // T触发器
-        toolMap[tffItem] = TYPE_T_FLIPFLOP;    // 映射到T触发器类型
-
-        wxTreeItemId regItem = AppendItem(sequentialNode, "4-bit Register");  // 4位寄存器
-        toolMap[regItem] = TYPE_REGISTER;  // 映射到寄存器类型
-
-        // 添加输入输出工具项
-        wxTreeItemId inputItem = AppendItem(ioNode, "Input Pin");    // 输入引脚
-        toolMap[inputItem] = TYPE_INPUT;    // 映射到输入类型
-
-        wxTreeItemId outputItem = AppendItem(ioNode, "Output Pin");  // 输出引脚
-        toolMap[outputItem] = TYPE_OUTPUT;  // 映射到输出类型
-
-        // 添加导线工具项
-        wxTreeItemId wireItem = AppendItem(wiresNode, "Wire Tool");  // 连线工具
-        toolMap[wireItem] = TYPE_WIRE;  // 映射到连线工具类型
-
-        // 添加选择工具项
-        wxTreeItemId selectItem = AppendItem(wiresNode, "Selection Tool");  // 选择工具
-        toolMap[selectItem] = TYPE_SELECT;  // 映射到选择工具类型
-
-        // 添加实际电路中的元件到树控件
-        const auto& elements = canvas->GetElements();  // 获取画布中所有元件
-        for (const auto& element : elements) {
-            wxTreeItemId parentNode;  // 父节点
-            // 根据元件类型确定父节点
-            switch (element->GetType()) {
-            case TYPE_AND:
-            case TYPE_OR:
-            case TYPE_NOT:
-            case TYPE_XOR:
-            case TYPE_NAND:
-            case TYPE_NOR:
-                parentNode = gatesNode;  // 逻辑门归到逻辑门分类
-                break;
-            case TYPE_CLOCK:
-            case TYPE_D_FLIPFLOP:
-            case TYPE_JK_FLIPFLOP:
-            case TYPE_T_FLIPFLOP:
-            case TYPE_REGISTER:
-                parentNode = sequentialNode;  // 时序元件归到时序元件分类
-                break;
-            case TYPE_INPUT:
-            case TYPE_OUTPUT:
-                parentNode = ioNode;  // 输入输出归到输入输出分类
-                break;
-            default:
-                continue;  // 未知类型跳过
-            }
-
-            // 创建显示文本：显示名称 + 坐标
-            wxString itemText = element->GetDisplayName() +
-                wxString::Format(" (X:%d, Y:%d)",
-                    element->GetX(), element->GetY());
-            wxTreeItemId itemId = AppendItem(parentNode, itemText);  // 添加到树控件
-            elementMap[itemId] = element.get();  // 建立映射关系
+        // 图标索引有效时设置图标
+        if (imageList != nullptr) {
+            // 为分类节点设置图标
+            SetCategoryNodeIcons();
+            // 添加所有工具节点（AND门用自定义图标）
+            AddAllToolNodes();
+        }
+        else {
+            // 图标列表无效：仅添加无图标节点
+            AddToolNodesWithoutIcon();
         }
 
-        // 添加导线到树控件
-        const auto& wires = canvas->GetWires();  // 获取画布中所有导线
-        for (size_t i = 0; i < wires.size(); ++i) {
-            wxString wireText = wxString::Format("Wire %zu", i + 1);  // 导线名称
-            wxTreeItemId itemId = AppendItem(wiresNode, wireText);    // 添加到导线分类
-            wireMap[itemId] = wires[i].get();  // 建立映射关系
-        }
-
-        ExpandAll();  // 展开所有节点
+        // 添加画布中已有的实际元件（AND门用自定义图标）和导线
+        AddActualCircuitElements();
+        AddActualCircuitWires();
     }
 
 private:
-    // 初始化工具映射（空实现，实际在UpdateTree中填充）
-    void InitializeToolMap() {
-        // 这个映射将在 UpdateTree 中填充
+    // 辅助函数1：初始化图标列表（核心：加载24×24px AND.png）
+    void InitImageList() {
+        // 图标尺寸改为24×24px（匹配自定义AND.png）
+        imageList = new wxImageList(24, 24, true, 5); // 预留5个图标位置
+
+        // -------------------------- 1. 加载自定义AND.png图标（24×24px） --------------------------
+        wxString andImgPath = "AND.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_AND;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(andImgPath)) {
+            bmp_AND.LoadFile(andImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_AND = imageList->Add(bmp_AND.IsOk() ? bmp_AND : CreateEmptyBitmap(24, 24));
+
+
+        wxString nandImgPath = "NAND.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_NAND;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(nandImgPath)) {
+            bmp_NAND.LoadFile(nandImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_NAND = imageList->Add(bmp_NAND.IsOk() ? bmp_NAND : CreateEmptyBitmap(24, 24));
+
+
+        wxString orImgPath = "OR.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_OR;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(orImgPath)) {
+            bmp_OR.LoadFile(orImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_OR = imageList->Add(bmp_OR.IsOk() ? bmp_OR : CreateEmptyBitmap(24, 24));
+
+        wxString xorImgPath = "XOR.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_XOR;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(xorImgPath)) {
+            bmp_XOR.LoadFile(xorImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_XOR = imageList->Add(bmp_XOR.IsOk() ? bmp_XOR : CreateEmptyBitmap(24, 24));
+
+
+        wxString norImgPath = "NOR.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_NOR;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(norImgPath)) {
+            bmp_NOR.LoadFile(norImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_NOR = imageList->Add(bmp_NOR.IsOk() ? bmp_NOR : CreateEmptyBitmap(24, 24));
+
+
+        wxString notImgPath = "NOT.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_NOT;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(notImgPath)) {
+            bmp_NOT.LoadFile(notImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_NOT = imageList->Add(bmp_NOT.IsOk() ? bmp_NOT : CreateEmptyBitmap(24, 24));
+
+
+        wxString outImgPath = "OUTPUT.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_OUT;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(outImgPath)) {
+            bmp_OUT.LoadFile(outImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_OUT = imageList->Add(bmp_OUT.IsOk() ? bmp_OUT : CreateEmptyBitmap(24, 24));
+
+
+        wxString inImgPath = "INPUT.png"; // 图片路径（需与exe同目录，或写绝对路径）
+        wxBitmap bmp_IN;
+        // 检查图片文件是否存在
+        if (wxFileName::FileExists(inImgPath)) {
+            bmp_IN.LoadFile(inImgPath, wxBITMAP_TYPE_PNG);
+        }
+        // 加载失败时用备用图标
+        iconIndex_IN = imageList->Add(bmp_IN.IsOk() ? bmp_IN : CreateEmptyBitmap(24, 24));
+
+        // -------------------------- 2. 加载其他图标（24×24px，适配整体风格） --------------------------
+        // 其他逻辑门（OR/NOT等）图标（用内置图标缩放）
+        wxBitmap bmp_GateOthers = wxArtProvider::GetBitmap(wxART_FILE_OPEN, wxART_OTHER, wxSize(24, 24));
+        iconIndex_GateOthers = imageList->Add(bmp_GateOthers.IsOk() ? bmp_GateOthers : CreateEmptyBitmap(24, 24));
+
+        // 分类节点/工具默认图标
+        wxBitmap bmp_FileOpen = wxArtProvider::GetBitmap(wxART_FILE_OPEN, wxART_OTHER, wxSize(24, 24));
+        iconIndex_FileOpen = imageList->Add(bmp_FileOpen.IsOk() ? bmp_FileOpen : CreateEmptyBitmap(24, 24));
+
+        // 时钟图标
+        wxBitmap bmp_Clock = wxArtProvider::GetBitmap(wxART_FILE_OPEN, wxART_OTHER, wxSize(24, 24));
+        iconIndex_Clock = imageList->Add(bmp_Clock.IsOk() ? bmp_Clock : CreateEmptyBitmap(24, 24));
+
+        // 输入输出图标
+        wxBitmap bmp_IO = wxArtProvider::GetBitmap(wxART_FILE_OPEN, wxART_OTHER, wxSize(24, 24));
+        iconIndex_IO = imageList->Add(bmp_IO.IsOk() ? bmp_IO : CreateEmptyBitmap(24, 24));
+        // 将图标列表绑定到树控件
+        SetImageList(imageList);
     }
 
-    // 树控件选择改变事件处理
+    // 辅助函数2：创建指定尺寸的空白图标（图标加载失败时备用）
+    wxBitmap CreateEmptyBitmap(int width, int height) {
+        wxBitmap bmp(width, height, 32); // 32位带透明通道
+        wxMemoryDC dc(bmp);
+        dc.SetBrush(*wxWHITE_BRUSH);
+        dc.Clear(); // 填充白色背景（与树背景适配）
+        return bmp;
+    }
+
+    // 辅助函数3：创建树的根节点和分类节点
+    void CreateTreeStructure() {
+        root = AddRoot("Circuit Elements"); // 根节点（隐藏）
+        gatesNode = AppendItem(root, "Logic Gates"); // 逻辑门分类
+        sequentialNode = AppendItem(root, "Sequential Elements"); // 时序元件分类
+        ioNode = AppendItem(root, "Input/Output"); // 输入输出分类
+        wiresNode = AppendItem(root, "Wire & Tools"); // 导线与工具分类
+    }
+
+    // 辅助函数4：绑定树控件事件
+    void BindEvents() {
+        Bind(wxEVT_TREE_SEL_CHANGED, &ElementTreeCtrl::OnSelectionChanged, this);
+        Bind(wxEVT_TREE_ITEM_ACTIVATED, &ElementTreeCtrl::OnItemActivated, this);
+    }
+
+    // 辅助函数5：清除所有分类节点的子节点
+    void ClearAllChildNodes() {
+        DeleteChildren(gatesNode);
+        DeleteChildren(sequentialNode);
+        DeleteChildren(ioNode);
+        DeleteChildren(wiresNode);
+    }
+
+    // 辅助函数6：为分类节点设置图标
+    void SetCategoryNodeIcons() {
+        // 逻辑门分类节点 → 其他逻辑门图标（非AND门）
+        SetItemImage(gatesNode, iconIndex_GateOthers, wxTreeItemIcon_Normal);
+        // 时序元件分类节点 → 时钟图标
+        SetItemImage(sequentialNode, iconIndex_Clock, wxTreeItemIcon_Normal);
+        // 输入输出分类节点 → 输入输出图标
+        SetItemImage(ioNode, iconIndex_IN, wxTreeItemIcon_Normal);
+        SetItemImage(ioNode, iconIndex_OUT, wxTreeItemIcon_Normal);
+        SetItemImage(ioNode, iconIndex_IO, wxTreeItemIcon_Normal);
+        // 导线与工具分类节点 → 默认图标
+        SetItemImage(wiresNode, iconIndex_FileOpen, wxTreeItemIcon_Normal);
+    }
+
+    // 辅助函数7：添加所有工具节点（AND门用自定义AND.png）
+    void AddAllToolNodes() {
+        // -------------------------- AND门工具节点 → 自定义AND.png图标 --------------------------
+        AddToolNode(gatesNode, "AND Gate", TYPE_AND, iconIndex_AND);
+
+        // -------------------------- 其他逻辑门工具节点 → 通用门图标 --------------------------
+        AddToolNode(gatesNode, "OR Gate", TYPE_OR, iconIndex_OR);
+        AddToolNode(gatesNode, "NOT Gate", TYPE_NOT, iconIndex_NOT);
+        AddToolNode(gatesNode, "XOR Gate", TYPE_XOR, iconIndex_XOR);
+        AddToolNode(gatesNode, "NAND Gate", TYPE_NAND, iconIndex_NAND);
+        AddToolNode(gatesNode, "NOR Gate", TYPE_NOR, iconIndex_NOR);
+
+        // 时序元件工具节点 → 时钟图标
+        AddToolNode(sequentialNode, "Clock (Hz Adjustable)", TYPE_CLOCK, iconIndex_Clock);
+        AddToolNode(sequentialNode, "RS Flip-Flop", TYPE_RS_FLIPFLOP, iconIndex_Clock);
+        AddToolNode(sequentialNode, "D Flip-Flop (Edge-Triggered)", TYPE_D_FLIPFLOP, iconIndex_Clock);
+        AddToolNode(sequentialNode, "JK Flip-Flop", TYPE_JK_FLIPFLOP, iconIndex_Clock);
+        AddToolNode(sequentialNode, "T Flip-Flop (Toggle)", TYPE_T_FLIPFLOP, iconIndex_Clock);
+        AddToolNode(sequentialNode, "4-bit Register (Loadable)", TYPE_REGISTER, iconIndex_Clock);
+
+        // 输入输出工具节点 → 输入输出图
+        AddToolNode(ioNode, "Input Pin (Click to Toggle)", TYPE_INPUT, iconIndex_IN);
+        AddToolNode(ioNode, "Output Pin (Status Display)", TYPE_OUTPUT, iconIndex_OUT);
+
+        // 导线与工具节点 → 默认图标
+        AddToolNode(wiresNode, "Wire Tool (Connect Pins)", TYPE_WIRE, iconIndex_FileOpen);
+        AddToolNode(wiresNode, "Selection Tool (Move/Select)", TYPE_SELECT, iconIndex_FileOpen);
+        AddToolNode(wiresNode, "Toggle Value Tool (Input)", TYPE_TOGGLE_VALUE, iconIndex_FileOpen);
+    }
+
+    // 辅助函数8：添加单个带图标工具节点（支持指定图标索引）
+    void AddToolNode(wxTreeItemId parentNode, const wxString& nodeText, ElementType toolType, int iconIndex) {
+        if (iconIndex == -1 || !parentNode.IsOk()) return;
+        wxTreeItemId itemId = AppendItem(parentNode, nodeText);
+        toolMap[itemId] = toolType;
+        // 设置指定图标（24×24px）
+        SetItemImage(itemId, iconIndex, wxTreeItemIcon_Normal);
+    }
+
+    // 辅助函数9：图标无效时添加无图标工具节点
+    void AddToolNodesWithoutIcon() {
+        AddToolNodeNoIcon(gatesNode, "AND Gate", TYPE_AND);
+        AddToolNodeNoIcon(gatesNode, "OR Gate", TYPE_OR);
+        AddToolNodeNoIcon(gatesNode, "NOT Gate", TYPE_NOT);
+        AddToolNodeNoIcon(sequentialNode, "Clock", TYPE_CLOCK);
+        AddToolNodeNoIcon(ioNode, "Input Pin", TYPE_INPUT);
+        AddToolNodeNoIcon(ioNode, "Output Pin", TYPE_OUTPUT);
+        AddToolNodeNoIcon(wiresNode, "Wire Tool", TYPE_WIRE);
+        AddToolNodeNoIcon(wiresNode, "Selection Tool", TYPE_SELECT);
+    }
+
+    // 辅助函数10：添加单个无图标工具节点
+    void AddToolNodeNoIcon(wxTreeItemId parentNode, const wxString& nodeText, ElementType toolType) {
+        if (!parentNode.IsOk()) return;
+        wxTreeItemId itemId = AppendItem(parentNode, nodeText);
+        toolMap[itemId] = toolType;
+    }
+
+    // 辅助函数11：添加画布中已有的实际元件（AND门用自定义AND.png）
+    void AddActualCircuitElements() {
+        const std::vector<std::unique_ptr<CircuitElement>>& elements = canvas->GetElements();
+        for (const auto& elem : elements) {
+            wxTreeItemId parentNode = GetParentNodeByElementType(elem->GetType());
+            if (!parentNode.IsOk()) continue;
+
+            // 节点文字：显示名称+坐标
+            wxString itemText = elem->GetDisplayName() +
+                wxString::Format(" (X:%d, Y:%d)", elem->GetX(), elem->GetY());
+            wxTreeItemId itemId = AppendItem(parentNode, itemText);
+            elementMap[itemId] = elem.get();
+
+            // -------------------------- 关键：AND门元件用自定义AND.png图标 --------------------------
+            int targetIconIndex = -1;
+            if (elem->GetType() == TYPE_AND) {
+                targetIconIndex = iconIndex_AND; // AND门 → 自定义图标
+            }
+            if (elem->GetType() == TYPE_OR) {
+                targetIconIndex = iconIndex_OR; // AND门 → 自定义图标
+            }
+            if (elem->GetType() == TYPE_XOR) {
+                targetIconIndex = iconIndex_XOR; // AND门 → 自定义图标
+            }
+            if (elem->GetType() == TYPE_NAND) {
+                targetIconIndex = iconIndex_NAND; // AND门 → 自定义图标
+            }
+            if (elem->GetType() == TYPE_NOR) {
+                targetIconIndex = iconIndex_NOR; // AND门 → 自定义图标
+            }
+            if (elem->GetType() == TYPE_NOT) {
+                targetIconIndex = iconIndex_NOT; // AND门 → 自定义图标
+            }
+            else if (IsLogicGateType(elem->GetType())) {
+                targetIconIndex = iconIndex_GateOthers; // 其他逻辑门 → 通用图标
+            }
+            else if (IsSequentialType(elem->GetType())) {
+                targetIconIndex = iconIndex_Clock; // 时序元件 → 时钟图标
+            }
+            else if (elem->GetType() == TYPE_INPUT) {
+                targetIconIndex = iconIndex_IN; // 输入输出 → IO图标
+            }
+            else if (elem->GetType() == TYPE_OUTPUT) {
+                targetIconIndex = iconIndex_OUT; // 输入输出 → IO图标
+            }
+            else {
+                targetIconIndex = iconIndex_FileOpen; // 默认图标
+            }
+
+            // 设置图标（24×24px）
+            if (targetIconIndex != -1) {
+                SetItemImage(itemId, targetIconIndex, wxTreeItemIcon_Normal);
+            }
+        }
+    }
+
+    // 辅助函数12：判断是否为逻辑门类型（除AND外）
+    bool IsLogicGateType(ElementType type) {
+        return type == TYPE_OR || type == TYPE_NOT || type == TYPE_XOR || type == TYPE_NAND || type == TYPE_NOR;
+    }
+
+    // 辅助函数13：判断是否为时序元件类型
+    bool IsSequentialType(ElementType type) {
+        return type == TYPE_CLOCK || type == TYPE_RS_FLIPFLOP || type == TYPE_D_FLIPFLOP ||
+            type == TYPE_JK_FLIPFLOP || type == TYPE_T_FLIPFLOP || type == TYPE_REGISTER;
+    }
+
+    // 辅助函数14：添加画布中已有的实际导线节点
+    void AddActualCircuitWires() {
+        const std::vector<std::unique_ptr<Wire>>& wires = canvas->GetWires();
+        for (size_t i = 0; i < wires.size(); ++i) {
+            wxString wireText = wxString::Format("Wire %zu (Connected)", i + 1);
+            wxTreeItemId itemId = AppendItem(wiresNode, wireText);
+            wireMap[itemId] = wires[i].get();
+
+            // 导线节点用默认图标
+            if (iconIndex_FileOpen != -1) {
+                SetItemImage(itemId, iconIndex_FileOpen, wxTreeItemIcon_Normal);
+            }
+        }
+    }
+
+    // 辅助函数15：根据元件类型获取对应的父分类节点
+    wxTreeItemId GetParentNodeByElementType(ElementType type) {
+        switch (type) {
+        case TYPE_AND: case TYPE_OR: case TYPE_NOT: case TYPE_XOR: case TYPE_NAND: case TYPE_NOR:
+            return gatesNode;
+        case TYPE_CLOCK: case TYPE_RS_FLIPFLOP: case TYPE_D_FLIPFLOP: case TYPE_JK_FLIPFLOP: case TYPE_T_FLIPFLOP: case TYPE_REGISTER:
+            return sequentialNode;
+        case TYPE_INPUT: case TYPE_OUTPUT:
+            return ioNode;
+        default:
+            return wxTreeItemId(); // 无效节点
+        }
+    }
+
+    // 事件处理：树节点选择改变
     void OnSelectionChanged(wxTreeEvent& event) {
-        wxTreeItemId itemId = event.GetItem();  // 获取选中的项目ID
-        // 检查是否是工具项
-        if (itemId.IsOk() && toolMap.find(itemId) != toolMap.end()) {
-            ElementType selectedTool = toolMap[itemId];  // 获取对应的工具类型
-            canvas->SetCurrentTool(selectedTool);  // 设置画布当前工具
+        wxTreeItemId selectedItem = event.GetItem();
+        if (!selectedItem.IsOk()) return;
 
-            // 更新状态栏显示（通过主窗口）
-            wxWindow* topWindow = wxGetTopLevelParent(this);  // 获取顶层窗口
-            if (topWindow && topWindow->IsKindOf(CLASSINFO(wxFrame))) {
-                wxFrame* frame = static_cast<wxFrame*>(topWindow);
-                wxStatusBar* statusBar = frame->GetStatusBar();  // 获取状态栏
-                if (statusBar) {
-                    wxString toolName = GetToolName(selectedTool);  // 获取工具名称
-                    statusBar->SetStatusText(wxString::Format("%s selected from tree", toolName));  // 更新状态栏
-                }
-            }
+        // 检查是否为工具节点
+        auto toolIt = toolMap.find(selectedItem);
+        if (toolIt != toolMap.end()) {
+            ElementType toolType = toolIt->second;
+            canvas->SetCurrentTool(toolType);
+            UpdateStatusBar(toolType); // 更新状态栏提示
         }
-        event.Skip();  // 传递事件
+        event.Skip();
     }
 
-    // 树控件项目激活事件处理（双击）
+    // 事件处理：树节点双击激活
     void OnItemActivated(wxTreeEvent& event) {
-        wxTreeItemId itemId = event.GetItem();  // 获取激活的项目ID
-        // 检查是否是工具项
-        if (itemId.IsOk() && toolMap.find(itemId) != toolMap.end()) {
-            ElementType selectedTool = toolMap[itemId];  // 获取对应的工具类型
-            canvas->SetCurrentTool(selectedTool);  // 设置画布当前工具
+        wxTreeItemId activatedItem = event.GetItem();
+        if (!activatedItem.IsOk()) return;
 
-            // 在画布上自动放置一个元件（如果是元件工具）
-            if (selectedTool != TYPE_SELECT && selectedTool != TYPE_WIRE) {
-                // 获取画布中心位置
-                wxSize canvasSize = canvas->GetClientSize();  // 获取画布尺寸
-                wxPoint centerPos(canvasSize.GetWidth() / 2, canvasSize.GetHeight() / 2);  // 计算中心点
-
-                // 创建新元件（这里需要扩展 CircuitCanvas 的功能）
-                canvas->CreateElementAtPosition(selectedTool, centerPos);  // 在中心位置创建元件
+        // 检查是否为工具节点
+        auto toolIt = toolMap.find(activatedItem);
+        if (toolIt != toolMap.end()) {
+            ElementType toolType = toolIt->second;
+            // 排除选择工具和导线工具（不自动创建）
+            if (toolType != TYPE_SELECT && toolType != TYPE_WIRE) {
+                CreateElementAtCanvasCenter(toolType);
             }
+            canvas->SetCurrentTool(toolType);
         }
-        event.Skip();  // 传递事件
+        event.Skip();
     }
 
-    // 获取工具名称
-    wxString GetToolName(ElementType tool) {
-        // 添加时序元件的名称
-        switch (tool) {
-        case TYPE_SELECT: return "Selection Tool";        // 选择工具
-        case TYPE_AND: return "AND Gate";                 // AND门
-        case TYPE_OR: return "OR Gate";                   // OR门
-        case TYPE_NOT: return "NOT Gate";                 // NOT门
-        case TYPE_XOR: return "XOR Gate";                 // XOR门
-        case TYPE_NAND: return "NAND Gate";               // NAND门
-        case TYPE_NOR: return "NOR Gate";                 // NOR门
-        case TYPE_CLOCK: return "Clock";                  // 时钟元件
-        case TYPE_D_FLIPFLOP: return "D Flip-Flop";       // D触发器
-        case TYPE_JK_FLIPFLOP: return "JK Flip-Flop";     // JK触发器
-        case TYPE_T_FLIPFLOP: return "T Flip-Flop";       // T触发器
-        case TYPE_REGISTER: return "4-bit Register";      // 4位寄存器
-        case TYPE_INPUT: return "Input Pin";              // 输入引脚
-        case TYPE_OUTPUT: return "Output Pin";            // 输出引脚
-        case TYPE_WIRE: return "Wire Tool";               // 连线工具
-        default: return "Unknown Tool";                   // 未知工具
+    // 辅助函数16：更新状态栏提示（通过顶层窗口）
+    void UpdateStatusBar(ElementType toolType) {
+        wxWindow* topWindow = wxGetTopLevelParent(this);
+        if (!topWindow || !topWindow->IsKindOf(CLASSINFO(wxFrame))) return;
+
+        wxFrame* frame = static_cast<wxFrame*>(topWindow);
+        wxStatusBar* statusBar = frame->GetStatusBar();
+        if (!statusBar) return;
+
+        statusBar->SetStatusText(wxString::Format("Selected Tool: %s", GetToolDisplayName(toolType)));
+    }
+
+    // 辅助函数17：在画布中心创建元件
+    void CreateElementAtCanvasCenter(ElementType toolType) {
+        wxSize canvasSize = canvas->GetClientSize();
+        wxPoint centerPos(canvasSize.GetWidth() / 2, canvasSize.GetHeight() / 2);
+        canvas->CreateElementAtPosition(toolType, centerPos);
+    }
+
+    // 辅助函数18：获取工具的显示名称
+    wxString GetToolDisplayName(ElementType toolType) {
+        switch (toolType) {
+        case TYPE_SELECT: return "Selection Tool (Move/Select Elements)";
+        case TYPE_TOGGLE_VALUE: return "Toggle Value Tool (Click Input Pins)";
+        case TYPE_WIRE: return "Wire Tool (Connect Pins)";
+        case TYPE_AND: return "AND Gate (2-Input, Custom Icon)"; // 标注自定义图标
+        case TYPE_OR: return "OR Gate (2-Input)";
+        case TYPE_NOT: return "NOT Gate (1-Input)";
+        case TYPE_XOR: return "XOR Gate (2-Input)";
+        case TYPE_NAND: return "NAND Gate (2-Input)";
+        case TYPE_NOR: return "NOR Gate (2-Input)";
+        case TYPE_CLOCK: return "Clock Signal (Adjustable Frequency)";
+        case TYPE_RS_FLIPFLOP: return "RS Flip-Flop (Set/Reset)";
+        case TYPE_D_FLIPFLOP: return "D Flip-Flop (Edge-Triggered)";
+        case TYPE_JK_FLIPFLOP: return "JK Flip-Flop (Set/Reset/Toggle)";
+        case TYPE_T_FLIPFLOP: return "T Flip-Flop (Toggle Mode)";
+        case TYPE_REGISTER: return "4-bit Register (Loadable)";
+        case TYPE_INPUT: return "Input Pin (Click to Toggle Value)";
+        case TYPE_OUTPUT: return "Output Pin (Display Signal Status)";
+        default: return "Unknown Tool";
         }
     }
 
-    // 私有成员变量
-    std::map<wxTreeItemId, CircuitElement*> elementMap;  // 树项目到电路元件的映射
-    std::map<wxTreeItemId, Wire*> wireMap;               // 树项目到导线的映射
-    wxTreeItemId root;                                   // 根节点
-    wxTreeItemId gatesNode;                              // 逻辑门分类节点
-    wxTreeItemId sequentialNode;                         // 时序元件分类节点
-    wxTreeItemId ioNode;                                 // 输入输出分类节点
-    wxTreeItemId wiresNode;                              // 导线分类节点
-    CircuitCanvas* canvas;                               // 电路画布指针
-    std::map<wxTreeItemId, ElementType> toolMap;         // 树项目到工具类型的映射
+    // -------------------------- 私有成员变量 --------------------------
+    wxImageList* imageList;                          // 24×24px图标列表
+    // 图标索引（每个图标专属）
+    int iconIndex_FileOpen;    // 默认图标（分类节点/导线工具）
+    int iconIndex_GateOthers;  // 其他逻辑门（OR/NOT等）图标
+    int iconIndex_AND;// AND门自定义图标（AND.png）
+    int iconIndex_OR;
+    int iconIndex_XOR;
+    int iconIndex_NOR;
+    int iconIndex_NOT;
+    int iconIndex_NAND;
+    int iconIndex_Clock;       // 时钟/时序元件图标
+    int iconIndex_IN;
+    int iconIndex_OUT;
+    int iconIndex_IO;
+    // 输入输出图标
+    // 树节点
+    wxTreeItemId root;                               // 根节点（隐藏）
+    wxTreeItemId gatesNode;                          // 逻辑门分类节点
+    wxTreeItemId sequentialNode;                     // 时序元件分类节点
+    wxTreeItemId ioNode;                             // 输入输出分类节点
+    wxTreeItemId wiresNode;                          // 导线与工具分类节点
+    // 关联对象与映射
+    CircuitCanvas* canvas;                           // 电路画布指针
+    std::map<wxTreeItemId, ElementType> toolMap;     // 工具节点→元件类型映射
+    std::map<wxTreeItemId, CircuitElement*> elementMap; // 节点→实际元件映射
+    std::map<wxTreeItemId, Wire*> wireMap;           // 节点→实际导线映射
 };
 
 // 真值表对话框
@@ -4365,7 +4785,6 @@ void CircuitCanvas::ShowTruthTable() {
     dialog.ShowModal();
 }
 
-// 属性面板类
 // 属性面板类
 class PropertiesPanel : public wxPanel {
 public:
@@ -4519,7 +4938,7 @@ private:
     // 获取元件连接信息
     wxString GetElementConnectionInfo(CircuitElement* element) {
         wxString info;
-        info <<  element->GetDisplayName().Upper() << " CONNECTION INFO\n\n";
+        info << element->GetDisplayName().Upper() << " CONNECTION INFO\n\n";
 
         auto pins = element->GetPins();
         std::vector<Pin*> inputPins;
