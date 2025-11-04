@@ -1,3 +1,7 @@
+#pragma once
+#ifndef GATE_H
+#define GATE_H
+
 // 逻辑门基类
 class Gate : public CircuitElement {
 public:
@@ -394,3 +398,5 @@ private:
     std::vector<std::unique_ptr<Pin>> inputs;
     std::vector<std::unique_ptr<Pin>> outputs;
 };
+
+#endif
