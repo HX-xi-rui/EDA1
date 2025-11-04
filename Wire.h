@@ -1,15 +1,24 @@
-// 导线类
+#pragma once
+#ifndef WIRE_H
+#define WIRE_H
+
 class Wire {
 public:
     // 构造函数，接收起始引脚和结束引脚
     Wire(Pin* start, Pin* end) : startPin(start), endPin(end) {
         // 建立双向连接：将导线对象设置到两个引脚中
-        start->SetConnectedWire(this);
-        end->SetConnectedWire(this);
+        if (start && !start->IsVirtual()) {
+            start->SetConnectedWire(this);
+        }
+        if (end && !end->IsVirtual()) {
+            end->SetConnectedWire(this);
+        }
     }
 
     // 绘制导线
     void Draw(wxDC& dc) {
+        if (!startPin || !endPin) return;
+
         // 根据信号值选择颜色：绿色=1（高电平），红色=0（低电平）
         bool value = startPin->GetValue();  // 获取起始引脚的值
         dc.SetPen(value ? wxPen(*wxGREEN, 2) : wxPen(*wxRED, 2));  // 设置画笔颜色和宽度
@@ -82,7 +91,14 @@ public:
         }
     }
 
+    // 检查导线是否包含虚拟引脚
+    bool HasVirtualPin() const {
+        return (startPin && startPin->IsVirtual()) || (endPin && endPin->IsVirtual());
+    }
+
 private:
     Pin* startPin;  // 起始引脚指针
     Pin* endPin;    // 结束引脚指针
 };
+
+#endif
