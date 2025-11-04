@@ -1,4 +1,7 @@
-// 主菜单类
+#pragma once
+#ifndef MAINMENU_H
+#define MAINMENU_H
+
 class MainMenu : public wxMenuBar {
 public:
     MainMenu(CircuitCanvas* canvas) : canvas(canvas) {
@@ -45,12 +48,18 @@ public:
         viewMenu->AppendCheckItem(ID_SHOW_GRID, "Show &Grid\tG", "Toggle grid display");
         viewMenu->Check(ID_SHOW_GRID, true);
         viewMenu->Append(ID_TOGGLE_GRID, "Toggle &Grid\tG", "Toggle grid display");
+        viewMenu->AppendSeparator();
+        viewMenu->Append(ID_CENTER_VIEW, "&Center View\tCtrl+C", "Center the view");
+        viewMenu->Append(ID_FIT_TO_WINDOW, "&Fit to Window\tCtrl+F", "Fit circuit to window");
 
-        // 工具菜单
+        // 工具菜单 - 添加时序元件
         wxMenu* toolsMenu = new wxMenu();
         toolsMenu->AppendRadioItem(ID_TOOL_SELECT, "&Select Tool\tS", "Selection tool");
+        toolsMenu->AppendRadioItem(ID_TOOL_TOGGLE_VALUE, "Toggle &Value Tool\tV", "Toggle input values tool");
         toolsMenu->AppendRadioItem(ID_TOOL_WIRE, "&Wire Tool\tW", "Wire connection tool");
         toolsMenu->AppendSeparator();
+
+        // 组合逻辑元件
         toolsMenu->AppendRadioItem(ID_TOOL_AND, "&AND Gate\tA", "AND Gate tool");
         toolsMenu->AppendRadioItem(ID_TOOL_OR, "&OR Gate\tO", "OR Gate tool");
         toolsMenu->AppendRadioItem(ID_TOOL_NOT, "&NOT Gate\tN", "NOT Gate tool");
@@ -58,6 +67,16 @@ public:
         toolsMenu->AppendRadioItem(ID_TOOL_NAND, "&NAND Gate", "NAND Gate tool");
         toolsMenu->AppendRadioItem(ID_TOOL_NOR, "N&OR Gate", "NOR Gate tool");
         toolsMenu->AppendSeparator();
+
+        // 时序逻辑元件
+        toolsMenu->AppendRadioItem(ID_TOOL_CLOCK, "C&lock Signal\tC", "Clock signal tool");
+        toolsMenu->AppendRadioItem(ID_TOOL_D_FLIPFLOP, "&D Flip-Flop\tD", "D Flip-Flop tool");
+        toolsMenu->AppendRadioItem(ID_TOOL_JK_FLIPFLOP, "&JK Flip-Flop\tJ", "JK Flip-Flop tool");
+        toolsMenu->AppendRadioItem(ID_TOOL_T_FLIPFLOP, "&T Flip-Flop\tT", "T Flip-Flop tool");
+        toolsMenu->AppendRadioItem(ID_TOOL_REGISTER, "&Register\tR", "4-bit Register tool");
+        toolsMenu->AppendSeparator();
+
+        // 输入输出
         toolsMenu->AppendRadioItem(ID_TOOL_INPUT, "&Input Pin\tI", "Input Pin tool");
         toolsMenu->AppendRadioItem(ID_TOOL_OUTPUT, "&Output Pin\tP", "Output Pin tool");
 
@@ -66,7 +85,7 @@ public:
         helpMenu->Append(wxID_ABOUT, "&About", "About this application");
         helpMenu->Append(wxID_HELP, "&Help\tF1", "Show help documentation");
 
-        // 添加所有菜单到菜单栏
+        // 添加到菜单栏
         Append(fileMenu, "&File");
         Append(editMenu, "&Edit");
         Append(simMenu, "&Simulation");
@@ -86,6 +105,7 @@ public:
         ID_SHOW_GRID,
         ID_TOGGLE_GRID,
         ID_TOOL_SELECT,
+        ID_TOOL_TOGGLE_VALUE,
         ID_TOOL_WIRE,
         ID_TOOL_AND,
         ID_TOOL_OR,
@@ -93,13 +113,23 @@ public:
         ID_TOOL_XOR,
         ID_TOOL_NAND,
         ID_TOOL_NOR,
+        ID_TOOL_CLOCK,
+        ID_TOOL_RS_FLIPFLOP,
+        ID_TOOL_D_FLIPFLOP,
+        ID_TOOL_JK_FLIPFLOP,
+        ID_TOOL_T_FLIPFLOP,
+        ID_TOOL_REGISTER,
         ID_TOOL_INPUT,
         ID_TOOL_OUTPUT,
         ID_RENAME,
         ID_DELETE_ALL,
-        ID_TRUTH_TABLE
+        ID_DELETE,
+        ID_TRUTH_TABLE,
+        ID_CENTER_VIEW,
+        ID_FIT_TO_WINDOW
     };
 
 private:
     CircuitCanvas* canvas;
 };
+#endif
