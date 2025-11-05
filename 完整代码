@@ -24,6 +24,11 @@ class Gate;
 class Wire;
 class CircuitCanvas;
 class TruthTableDialog;
+class NetlistNode;
+class NetlistElement;
+class Netlist;
+class BookshelfExporter;
+class NetlistGenerator;
 
 // 元素类型枚举 - 定义所有可用的电路元件类型
 enum ElementType {
@@ -45,7 +50,10 @@ enum ElementType {
     TYPE_T_FLIPFLOP,      // T触发器
     TYPE_REGISTER,        // 寄存器
     TYPE_COUNTER,         // 计数器
-    ID_TOGGLE_TREE
+    ID_TOGGLE_TREE,
+    ID_EXPORT_BOOKSHELF = wxID_HIGHEST + 100,
+    ID_IMPORT_BOOKSHELF,
+    ID_SHOW_NETLIST
 };
 
 // 引脚类
@@ -1962,6 +1970,11 @@ public:
         SetFocus();  // 设置焦点以接收键盘事件
     }
 
+    // 网表相关方法
+    std::unique_ptr<Netlist> GenerateNetlist();
+    bool ExportToBookshelf(const wxString& filename);
+    void ShowNetlistViewer();
+
     // 更新状态栏显示
     void UpdateStatusBar() {
         wxWindow* topWindow = wxGetTopLevelParent(this);
@@ -3536,6 +3549,7 @@ private:
     std::vector<std::unique_ptr<CircuitElement>> elements;  // 元件列表
     std::vector<std::unique_ptr<Wire>> wires;               // 导线列表
     Wire* selectedWire;           // 当前选中的导线
+    std::unique_ptr<Netlist> currentNetlist;
 
     // 绘制事件处理
     void OnPaint(wxPaintEvent& event) {
@@ -4785,6 +4799,435 @@ void CircuitCanvas::ShowTruthTable() {
     dialog.ShowModal();
 }
 
+// 网表节点类
+class NetlistNode {
+public:
+    NetlistNode(const wxString& id, int x = 0, int y = 0)
+        : nodeId(id), posX(x), posY(y) {
+    }
+
+    wxString GetId() const { return nodeId; }
+    void AddConnection(const wxString& elementId, const wxString& pinName) {
+        connections.push_back(std::make_pair(elementId, pinName));
+    }
+
+    const std::vector<std::pair<wxString, wxString>>& GetConnections() const {
+        return connections;
+    }
+
+    void SetPosition(int x, int y) { posX = x; posY = y; }
+    wxPoint GetPosition() const { return wxPoint(posX, posY); }
+
+private:
+    wxString nodeId;
+    std::vector<std::pair<wxString, wxString>> connections;
+    int posX, posY;
+};
+
+// 网表元件类
+class NetlistElement {
+public:
+    NetlistElement(const wxString& id, const wxString& type, int x = 0, int y = 0)
+        : elementId(id), elementType(type), posX(x), posY(y) {
+    }
+
+    wxString GetId() const { return elementId; }
+    wxString GetType() const { return elementType; }
+    wxPoint GetPosition() const { return wxPoint(posX, posY); }
+
+    void AddPin(const wxString& pinName, const wxString& nodeId) {
+        pins[pinName] = nodeId;
+    }
+
+    wxString GetPinNode(const wxString& pinName) const {
+        auto it = pins.find(pinName);
+        return it != pins.end() ? it->second : "";
+    }
+
+    const std::map<wxString, wxString>& GetPins() const { return pins; }
+
+    void SetProperty(const wxString& key, const wxString& value) {
+        properties[key] = value;
+    }
+
+    wxString GetProperty(const wxString& key) const {
+        auto it = properties.find(key);
+        return it != properties.end() ? it->second : "";
+    }
+
+private:
+    wxString elementId;
+    wxString elementType;
+    std::map<wxString, wxString> pins;
+    std::map<wxString, wxString> properties;
+    int posX, posY;
+};
+
+// 网表类
+class Netlist {
+public:
+    Netlist() : nextNodeId(1), nextElementId(1) {}
+
+    wxString AddNode(int x = 0, int y = 0) {
+        wxString nodeId = wxString::Format("n%d", nextNodeId++);
+        nodes[nodeId] = std::make_unique<NetlistNode>(nodeId, x, y);
+        return nodeId;
+    }
+
+    wxString AddElement(const wxString& type, int x = 0, int y = 0) {
+        wxString elementId = wxString::Format("e%d", nextElementId++);
+        elements[elementId] = std::make_unique<NetlistElement>(elementId, type, x, y);
+        return elementId;
+    }
+
+    bool ConnectPinToNode(const wxString& elementId, const wxString& pinName, const wxString& nodeId) {
+        auto elemIt = elements.find(elementId);
+        auto nodeIt = nodes.find(nodeId);
+
+        if (elemIt == elements.end() || nodeIt == nodes.end()) {
+            return false;
+        }
+
+        elemIt->second->AddPin(pinName, nodeId);
+        nodeIt->second->AddConnection(elementId, pinName);
+        return true;
+    }
+
+    NetlistNode* GetNode(const wxString& nodeId) {
+        auto it = nodes.find(nodeId);
+        return it != nodes.end() ? it->second.get() : nullptr;
+    }
+
+    NetlistElement* GetElement(const wxString& elementId) {
+        auto it = elements.find(elementId);
+        return it != elements.end() ? it->second.get() : nullptr;
+    }
+
+    const std::map<wxString, std::unique_ptr<NetlistNode>>& GetNodes() const { return nodes; }
+    const std::map<wxString, std::unique_ptr<NetlistElement>>& GetElements() const { return elements; }
+
+    void Clear() {
+        nodes.clear();
+        elements.clear();
+        nextNodeId = 1;
+        nextElementId = 1;
+    }
+
+private:
+    std::map<wxString, std::unique_ptr<NetlistNode>> nodes;
+    std::map<wxString, std::unique_ptr<NetlistElement>> elements;
+    int nextNodeId;
+    int nextElementId;
+};
+
+// Bookshelf格式导出器
+class BookshelfExporter {
+public:
+    static bool ExportNetlist(const Netlist& netlist, const wxString& filename,
+        const wxString& designName = "circuit_design") {
+        // 创建目录
+        wxFileName fn(filename);
+        wxString basePath = fn.GetPath();
+        wxString baseName = fn.GetName();
+
+        if (baseName.empty()) {
+            baseName = "circuit_design";
+        }
+
+        // 写入.aux文件
+        if (!WriteAuxFile(basePath, baseName)) return false;
+        if (!WriteNodesFile(basePath, baseName, netlist)) return false;
+        if (!WriteNetsFile(basePath, baseName, netlist)) return false;
+        if (!WritePlFile(basePath, baseName, netlist)) return false;
+        if (!WriteSclFile(basePath, baseName)) return false;
+
+        return true;
+    }
+
+private:
+    static bool WriteAuxFile(const wxString& path, const wxString& designName) {
+        wxString filename = wxFileName(path, designName + ".aux").GetFullPath();
+        wxFile file;
+        if (!file.Create(filename, true)) return false;
+
+        wxString content;
+        content += designName + ".aux : \\\n";
+        content += designName + ".nodes \\\n";
+        content += designName + ".nets \\\n";
+        content += designName + ".pl \\\n";
+        content += designName + ".scl\n";
+
+        file.Write(content);
+        file.Close();
+        return true;
+    }
+
+    static bool WriteNodesFile(const wxString& path, const wxString& designName, const Netlist& netlist) {
+        wxString filename = wxFileName(path, designName + ".nodes").GetFullPath();
+        wxFile file;
+        if (!file.Create(filename, true)) return false;
+
+        wxString content;
+        content += "UCLA nodes 1.0\n";
+        content += "# Created by Circuit Simulator\n\n";
+
+        content += "NumNodes : " + wxString::Format("%zu", netlist.GetElements().size()) + "\n";
+        content += "NumTerminals : 0\n\n";
+
+        for (const auto& elemPair : netlist.GetElements()) {
+            const auto& element = elemPair.second;
+            content += element->GetId() + " " + MapElementTypeToSize(element->GetType()) + "\n";
+        }
+
+        file.Write(content);
+        file.Close();
+        return true;
+    }
+
+    static bool WriteNetsFile(const wxString& path, const wxString& designName, const Netlist& netlist) {
+        wxString filename = wxFileName(path, designName + ".nets").GetFullPath();
+        wxFile file;
+        if (!file.Create(filename, true)) return false;
+
+        wxString content;
+        content += "UCLA nets 1.0\n";
+        content += "# Created by Circuit Simulator\n\n";
+
+        content += "NumNets : " + wxString::Format("%zu", netlist.GetNodes().size()) + "\n";
+        content += "NumPins : " + wxString::Format("%zu", CountTotalPins(netlist)) + "\n\n";
+
+        for (const auto& nodePair : netlist.GetNodes()) {
+            const auto& node = nodePair.second;
+            content += "Net : " + node->GetId() + "\n";
+            content += "NumPins : " + wxString::Format("%zu", node->GetConnections().size()) + "\n";
+
+            for (const auto& connection : node->GetConnections()) {
+                wxString direction = "I"; // 默认输入
+                content += "  " + connection.first + " " + direction + "\n";
+            }
+            content += "\n";
+        }
+
+        file.Write(content);
+        file.Close();
+        return true;
+    }
+
+    static bool WritePlFile(const wxString& path, const wxString& designName, const Netlist& netlist) {
+        wxString filename = wxFileName(path, designName + ".pl").GetFullPath();
+        wxFile file;
+        if (!file.Create(filename, true)) return false;
+
+        wxString content;
+        content += "UCLA pl 1.0\n";
+        content += "# Created by Circuit Simulator\n\n";
+
+        for (const auto& elemPair : netlist.GetElements()) {
+            const auto& element = elemPair.second;
+            wxPoint pos = element->GetPosition();
+            content += element->GetId() + " " +
+                wxString::Format("%d %d : N\n", pos.x, pos.y);
+        }
+
+        file.Write(content);
+        file.Close();
+        return true;
+    }
+
+    static bool WriteSclFile(const wxString& path, const wxString& designName) {
+        wxString filename = wxFileName(path, designName + ".scl").GetFullPath();
+        wxFile file;
+        if (!file.Create(filename, true)) return false;
+
+        wxString content;
+        content += "UCLA scl 1.0\n";
+        content += "# Created by Circuit Simulator\n\n";
+        content += "NumRows : 1\n\n";
+        content += "CoreRow Horizontal\n";
+        content += "Coordinate : 0\n";
+        content += "Height : 1000\n";
+        content += "Sitewidth : 1\n";
+        content += "Sitespacing : 1\n";
+        content += "Siteorient : 1\n";
+        content += "Sitesymmetry : 1\n";
+        content += "SubrowOrigin : 0 NumSites : 10000\n";
+        content += "End\n";
+
+        file.Write(content);
+        file.Close();
+        return true;
+    }
+
+    static wxString MapElementTypeToSize(const wxString& type) {
+        std::map<wxString, wxString> sizeMap = {
+            {"AND", "100"}, {"OR", "100"}, {"NOT", "50"}, {"XOR", "100"},
+            {"NAND", "100"}, {"NOR", "100"}, {"INPUT", "20"}, {"OUTPUT", "20"},
+            {"CLOCK", "80"}, {"D_FLIPFLOP", "200"}, {"JK_FLIPFLOP", "200"},
+            {"RS_FLIPFLOP", "200"}, {"T_FLIPFLOP", "200"}, {"REGISTER", "300"}
+        };
+        auto it = sizeMap.find(type);
+        return it != sizeMap.end() ? it->second : "100";
+    }
+
+    static size_t CountTotalPins(const Netlist& netlist) {
+        size_t count = 0;
+        for (const auto& nodePair : netlist.GetNodes()) {
+            count += nodePair.second->GetConnections().size();
+        }
+        return count;
+    }
+};
+
+// 网表生成器
+class NetlistGenerator {
+public:
+    static std::unique_ptr<Netlist> GenerateFromCircuit(CircuitCanvas* canvas) {
+        auto netlist = std::make_unique<Netlist>();
+        std::map<Pin*, wxString> pinToNodeMap;
+
+        // 第一步：为所有引脚创建节点
+        for (const auto& element : canvas->GetElements()) {
+            auto pins = element->GetPins();
+            for (auto pin : pins) {
+                if (pinToNodeMap.find(pin) == pinToNodeMap.end()) {
+                    wxString nodeId = netlist->AddNode(pin->GetX(), pin->GetY());
+                    pinToNodeMap[pin] = nodeId;
+                }
+            }
+        }
+
+        // 第二步：创建元件
+        for (const auto& element : canvas->GetElements()) {
+            wxString elementId = netlist->AddElement(
+                ElementTypeToString(element->GetType()),
+                element->GetX(),
+                element->GetY()
+            );
+
+            // 连接引脚到节点
+            auto pins = element->GetPins();
+            int inputIndex = 0, outputIndex = 0;
+            for (auto pin : pins) {
+                wxString pinName;
+                if (pin->IsInput()) {
+                    pinName = wxString::Format("in%d", inputIndex++);
+                }
+                else {
+                    pinName = wxString::Format("out%d", outputIndex++);
+                }
+
+                wxString nodeId = pinToNodeMap[pin];
+                netlist->ConnectPinToNode(elementId, pinName, nodeId);
+            }
+        }
+
+        return netlist;
+    }
+
+private:
+    static wxString ElementTypeToString(ElementType type) {
+        switch (type) {
+        case TYPE_AND: return "AND";
+        case TYPE_OR: return "OR";
+        case TYPE_NOT: return "NOT";
+        case TYPE_XOR: return "XOR";
+        case TYPE_NAND: return "NAND";
+        case TYPE_NOR: return "NOR";
+        case TYPE_INPUT: return "INPUT";
+        case TYPE_OUTPUT: return "OUTPUT";
+        case TYPE_CLOCK: return "CLOCK";
+        case TYPE_D_FLIPFLOP: return "D_FLIPFLOP";
+        case TYPE_JK_FLIPFLOP: return "JK_FLIPFLOP";
+        case TYPE_RS_FLIPFLOP: return "RS_FLIPFLOP";
+        case TYPE_T_FLIPFLOP: return "T_FLIPFLOP";
+        case TYPE_REGISTER: return "REGISTER";
+        default: return "UNKNOWN";
+        }
+    }
+};
+
+// 网表查看器窗口
+class NetlistViewer : public wxDialog {
+public:
+    NetlistViewer(wxWindow* parent, Netlist* netlist)
+        : wxDialog(parent, wxID_ANY, "Netlist Viewer", wxDefaultPosition, wxSize(600, 400)) {
+
+        wxTextCtrl* textCtrl = new wxTextCtrl(this, wxID_ANY, "",
+            wxDefaultPosition, wxDefaultSize,
+            wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH | wxHSCROLL);
+
+        wxString netlistText = GenerateNetlistText(netlist);
+        textCtrl->SetValue(netlistText);
+
+        wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+        sizer->Add(textCtrl, 1, wxEXPAND | wxALL, 5);
+
+        wxButton* closeBtn = new wxButton(this, wxID_CLOSE, "Close");
+        sizer->Add(closeBtn, 0, wxALIGN_CENTER | wxALL, 5);
+
+        SetSizer(sizer);
+
+        Bind(wxEVT_BUTTON, &NetlistViewer::OnClose, this, wxID_CLOSE);
+    }
+
+private:
+    void OnClose(wxCommandEvent& event) {
+        Close();
+    }
+
+    wxString GenerateNetlistText(Netlist* netlist) {
+        wxString text;
+        text += "=== NETLIST SUMMARY ===\n\n";
+        text += "Elements: " + wxString::Format("%zu", netlist->GetElements().size()) + "\n";
+        text += "Nodes: " + wxString::Format("%zu", netlist->GetNodes().size()) + "\n\n";
+
+        text += "=== ELEMENTS ===\n";
+        for (const auto& elemPair : netlist->GetElements()) {
+            const auto& element = elemPair.second;
+            text += element->GetId() + " [" + element->GetType() + "] at (" +
+                wxString::Format("%d,%d", element->GetPosition().x, element->GetPosition().y) + ")\n";
+
+            for (const auto& pinPair : element->GetPins()) {
+                text += "  " + pinPair.first + " -> " + pinPair.second + "\n";
+            }
+            text += "\n";
+        }
+
+        text += "=== NODES ===\n";
+        for (const auto& nodePair : netlist->GetNodes()) {
+            const auto& node = nodePair.second;
+            text += node->GetId() + ":\n";
+
+            for (const auto& conn : node->GetConnections()) {
+                text += "  " + conn.first + "." + conn.second + "\n";
+            }
+            text += "\n";
+        }
+
+        return text;
+    }
+};
+
+// CircuitCanvas的网表方法实现
+std::unique_ptr<Netlist> CircuitCanvas::GenerateNetlist() {
+    return NetlistGenerator::GenerateFromCircuit(this);
+}
+
+bool CircuitCanvas::ExportToBookshelf(const wxString& filename) {
+    currentNetlist = GenerateNetlist();
+    if (!currentNetlist) return false;
+
+    return BookshelfExporter::ExportNetlist(*currentNetlist, filename);
+}
+
+void CircuitCanvas::ShowNetlistViewer() {
+    currentNetlist = GenerateNetlist();
+    if (currentNetlist) {
+        NetlistViewer* viewer = new NetlistViewer(GetParent(), currentNetlist.get());
+        viewer->ShowModal();
+    }
+}
+
 // 属性面板类
 class PropertiesPanel : public wxPanel {
 public:
@@ -5118,6 +5561,16 @@ public:
         fileMenu->AppendSeparator();
         fileMenu->Append(wxID_EXIT, "E&xit\tAlt+F4", "Exit the application");
 
+       
+        wxMenu* netlistMenu = new wxMenu();
+        netlistMenu->Append(ID_EXPORT_BOOKSHELF, "Export &Bookshelf...","Export circuit as Bookshelf format netlist");
+        netlistMenu->Append(ID_SHOW_NETLIST, "Show &Netlist","Show netlist structure");
+        netlistMenu->AppendSeparator();
+        netlistMenu->Append(ID_IMPORT_BOOKSHELF, "&Import Bookshelf...","Import Bookshelf format netlist");
+
+
+   
+    
         // 编辑菜单
         wxMenu* editMenu = new wxMenu();
         editMenu->Append(wxID_UNDO, "&Undo\tCtrl+Z", "Undo the last action");
@@ -5192,6 +5645,7 @@ public:
         // 添加到菜单栏
         Append(fileMenu, "&File");
         Append(editMenu, "&Edit");
+        Append(netlistMenu, "&Netlist");
         Append(simMenu, "&Simulation");
         Append(viewMenu, "&View");
         Append(toolsMenu, "&Tools");
@@ -5479,11 +5933,56 @@ private:
     wxString currentFilename;             // 当前文件名
     bool treeVisible = true;              // 树控件可见性标志
 
+    std::unique_ptr<Netlist> currentNetlist;
+
+    void OnExportBookshelf(wxCommandEvent& event) {
+        wxFileDialog saveDialog(this, "Export Bookshelf Netlist", "", "circuit_design.aux",
+            "Bookshelf Files (*.aux)|*.aux",
+            wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+
+        if (saveDialog.ShowModal() == wxID_OK) {
+            wxString filename = saveDialog.GetPath();
+            if (canvas->ExportToBookshelf(filename)) {
+                wxMessageBox("Bookshelf netlist exported successfully!\n\n" +
+                    wxString::Format("Files created:\n- %s.nodes\n- %s.nets\n- %s.pl\n- %s.scl",
+                        saveDialog.GetPath(), saveDialog.GetPath(),
+                        saveDialog.GetPath(), saveDialog.GetPath()),
+                    "Export Success", wxOK | wxICON_INFORMATION, this);
+            }
+            else {
+                wxMessageBox("Failed to export Bookshelf netlist!", "Export Error",
+                    wxOK | wxICON_ERROR, this);
+            }
+        }
+    }
+
+    void OnShowNetlist(wxCommandEvent& event) {
+        canvas->ShowNetlistViewer();
+    }
+
+    void OnImportBookshelf(wxCommandEvent& event) {
+        wxMessageBox("Bookshelf import feature is not yet implemented.\n\n"
+            "You can export netlists to use with other EDA tools.",
+            "Feature Not Available", wxOK | wxICON_INFORMATION, this);
+    }
+
+
     // 菜单事件处理函数
     void OnMenuEvent(wxCommandEvent& event) {
         int id = event.GetId();  // 获取事件ID
 
         switch (id) {
+        case ID_EXPORT_BOOKSHELF:
+            OnExportBookshelf(event);
+            break;
+
+        case ID_SHOW_NETLIST:
+            OnShowNetlist(event);
+            break;
+
+        case ID_IMPORT_BOOKSHELF:
+            OnImportBookshelf(event);
+            break;
         case wxID_CUT:
             if (canvas->HasSelectedElements()) {
                 canvas->CopySelectedElements(); // 先复制
