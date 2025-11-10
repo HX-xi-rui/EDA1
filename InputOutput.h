@@ -178,15 +178,18 @@ public:
     }
 
     // 序列化元件数据
-    virtual void Serialize(wxString& data) const override {
-        wxString nameToSave = customName;
-        if (nameToSave.empty()) {
-            nameToSave = type == TYPE_INPUT ? "INPUT" : "OUTPUT";
-        }
-        // 不保存指针信息
-        data += wxString::Format("%d,%d,%d,%d,%s",
-            type, posX, posY, value ? 1 : 0, nameToSave);
+virtual void Serialize(wxString& data) const override {
+    // 只保存真正的自定义名称，过滤掉默认名称
+    wxString nameToSave = customName;
+    if (nameToSave == "INPUT" || nameToSave == "OUTPUT" || 
+        nameToSave == "IN" || nameToSave == "OUT" ||
+        nameToSave == "Input Pin" || nameToSave == "Output Pin") {
+        nameToSave = "";
     }
+    
+    data += wxString::Format("%d,%d,%d,%d,%s,",
+        type, posX, posY, value ? 1 : 0, nameToSave);
+}
 
     // 反序列化元件数据
     virtual void Deserialize(const wxString& data) override {
