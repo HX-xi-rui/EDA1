@@ -18,8 +18,11 @@ public:
 
     // 绘制输入输出元件
     virtual void Draw(wxDC& dc) override {
-        dc.SetPen(selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1));
-        dc.SetBrush(value ? *wxGREEN_BRUSH : *wxWHITE_BRUSH);
+
+        wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
+        wxBrush fillBrush = value ? *wxGREEN_BRUSH : *wxWHITE_BRUSH;
+        dc.SetPen(borderPen);
+        dc.SetBrush(fillBrush);
 
         // 1. 绘制带方向凹口的主体（逻辑不变）
         const int BODY_SIZE = 30;
@@ -84,38 +87,36 @@ public:
         dc.DrawText(label, posX - labelSize.GetWidth() / 2 + horizontalOffset, posY - BODY_SIZE / 4);
 
 
-        // -------------------------- 调整后：圆圈和数字整体下移25px --------------------------
+        // 圆圈和数字
         dc.SetTextForeground(*wxRED);
         wxString valueText = value ? "1" : "0";
         wxSize textSize = dc.GetTextExtent(valueText);
 
+        // 定义圆圈内边距常量，确保文本与圆圈边界之间有适当间距
         const int CIRCLE_PADDING = 2;
+
         int circleDiameter = std::max(textSize.GetWidth(), textSize.GetHeight()) + 2 * CIRCLE_PADDING;
         int circleRadius = circleDiameter / 2;
 
-        // 核心修改：在原垂直中心基础上 +25px（整体下移25px）
+         // 原垂直中心
         wxPoint circleCenter(
             posX - textSize.GetWidth() / 2, // 水平位置不变
-            // 原垂直中心：posY + BODY_SIZE/4 - textSize.GetHeight()/2 
-            // 新增下移：+25
             posY + BODY_SIZE / 4 - textSize.GetHeight() / 2 - 27
         );
 
-        // 1. 绘制圆形边框
+        // 绘制圆形边框
         dc.SetPen(*wxBLACK_PEN);
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
         dc.DrawCircle(circleCenter, circleRadius);
 
-        // 2. 绘制"0/1"文字（与圆形中心对齐，随圆形同步下移）
+        // 绘制"0/1"文字（与圆形中心对齐，随圆形同步下移）
         dc.DrawText(
             valueText,
             circleCenter.x - textSize.GetWidth() / 2,
             circleCenter.y - textSize.GetHeight() / 2
         );
-        // -------------------------------------------------------------------------------------
 
-
-        // 4. 绘制引脚（逻辑不变）
+        // 绘制引脚（逻辑不变）
         dc.SetPen(*wxBLACK_PEN);
         dc.SetTextForeground(*wxBLACK);
         for (auto& pin : pins) {
@@ -178,18 +179,18 @@ public:
     }
 
     // 序列化元件数据
-virtual void Serialize(wxString& data) const override {
-    // 只保存真正的自定义名称，过滤掉默认名称
-    wxString nameToSave = customName;
-    if (nameToSave == "INPUT" || nameToSave == "OUTPUT" || 
-        nameToSave == "IN" || nameToSave == "OUT" ||
-        nameToSave == "Input Pin" || nameToSave == "Output Pin") {
-        nameToSave = "";
+    virtual void Serialize(wxString& data) const override {
+        // 只保存真正的自定义名称，过滤掉默认名称
+        wxString nameToSave = customName;
+        if (nameToSave == "INPUT" || nameToSave == "OUTPUT" ||
+            nameToSave == "IN" || nameToSave == "OUT" ||
+            nameToSave == "Input Pin" || nameToSave == "Output Pin") {
+            nameToSave = "";
+        }
+
+        data += wxString::Format("%d,%d,%d,%d,%s,",
+            type, posX, posY, value ? 1 : 0, nameToSave);
     }
-    
-    data += wxString::Format("%d,%d,%d,%d,%s,",
-        type, posX, posY, value ? 1 : 0, nameToSave);
-}
 
     // 反序列化元件数据
     virtual void Deserialize(const wxString& data) override {
