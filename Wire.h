@@ -84,7 +84,6 @@ public:
     // 序列化导线数据
     void Serialize(wxString& data) const {
         if (startPin && endPin) {
-            // 使用引脚坐标而不是指针，避免指针失效问题
             data += wxString::Format("WIRE,%d,%d,%d,%d,%d,%d",
                 startPin->GetX(), startPin->GetY(), startPin->IsInput() ? 1 : 0,
                 endPin->GetX(), endPin->GetY(), endPin->IsInput() ? 1 : 0);
