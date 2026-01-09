@@ -7,21 +7,30 @@ class Gate : public CircuitElement {
 public:
     Gate(ElementType type, int x, int y) : CircuitElement(type, x, y) {
         const int PIN_OFFSET = 40; // 扩大后的引脚偏移
-        if (type == TYPE_NOT) {
+      if (type == TYPE_NOT) {
             inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y, true, this));
             outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
         }
         else {
-            inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y - 20, true, this));
-            inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y + 20, true, this));
-            outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
+            // 对于 OR/NOR/XOR 门，引脚位置需要特殊处理
+            if (type == TYPE_OR || type == TYPE_NOR || type == TYPE_XOR) {
+                // OR/NOR/XOR 门：输入引脚在左侧椭圆弧上
+                inputs.push_back(std::make_unique<Pin>(x - 40, y - 15, true, this));  // 上输入
+                inputs.push_back(std::make_unique<Pin>(x - 40, y + 15, true, this));  // 下输入
+                outputs.push_back(std::make_unique<Pin>(x + 40, y, false, this));     // 右输出
+            }
+            else {
+                // AND/NAND 门：标准引脚位置
+                inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y - 20, true, this));
+                inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y + 20, true, this));
+                outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
+            }
         }
     }
 
     virtual void Draw(wxDC& dc) override {
         // 保存初始字体状态（关键：记录绘制前的默认字体）
         wxFont originalFont = dc.GetFont();
-
         wxPen borderPen = selected ? wxPen(*wxRED, 2) : wxPen(*wxBLACK, 1);
         wxBrush fillBrush = *wxWHITE_BRUSH;
         dc.SetPen(borderPen);
@@ -34,7 +43,7 @@ public:
 
         switch (type) {
         case TYPE_AND: {
-            const int PIN_OFFSET = 40;
+            const int PIN_OFFSET = 40; // 引脚偏移量，用于确定门形状的宽度
             wxPoint andPoints[] = {
                 wxPoint(posX - PIN_OFFSET, posY - GATE_HEIGHT / 2),
                 wxPoint(posX - PIN_OFFSET / 3, posY - GATE_HEIGHT / 2),
@@ -73,21 +82,22 @@ public:
             wxPoint gateCenter(posX, posY);
             int arcLeftX = posX - GATE_WIDTH / 2;
             int arcTopY = posY - GATE_HEIGHT / 2;
-            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT);
+            wxRect arcRect(arcLeftX, arcTopY, GATE_WIDTH, GATE_HEIGHT);// 定义椭圆边界矩形
 
+            // 定义绘制椭圆扇形的lambda函数
             auto DrawEllipticalSector = [](wxDC& dc, const wxRect& rect, double startAngle, double endAngle, int segments = 36) {
                 wxPoint center(rect.x + rect.width / 2, rect.y + rect.height / 2);
                 double rx = rect.width / 2.0;
                 double ry = rect.height / 2.0;
-                std::vector<wxPoint> points;
+                std::vector<wxPoint> points;// 存储多边形顶点
                 points.push_back(center);
                 for (int i = segments; i >= 0; i--) {
-                    double angleRad = startAngle + (endAngle - startAngle) * i / segments;
+                    double angleRad = startAngle + (endAngle - startAngle) * i / segments; // 计算当前角度（弧度）
                     int x = center.x - rx * cos(angleRad);
                     int y = center.y + ry * sin(angleRad);
                     points.push_back(wxPoint(x, y));
                 }
-                dc.DrawPolygon(static_cast<int>(points.size()), &points[0]);
+                dc.DrawPolygon(static_cast<int>(points.size()), &points[0]);// 绘制填充多边形
                 };
 
             DrawEllipticalSector(dc, arcRect, M_PI / 6, 11 * M_PI / 6);
@@ -119,8 +129,8 @@ public:
         }
         case TYPE_NOT: {
             wxPoint triRight(posX + GATE_WIDTH / 2, posY);
-            wxPoint triTop(posX - GATE_WIDTH / 2, posY - GATE_HEIGHT / 2);
-            wxPoint triBottom(posX - GATE_WIDTH / 2, posY + GATE_HEIGHT / 2);
+            wxPoint triTop(posX - GATE_WIDTH / 2, posY + GATE_HEIGHT / 2);
+            wxPoint triBottom(posX - GATE_WIDTH / 2, posY - GATE_HEIGHT / 2);
             wxPoint triVertices[] = { triRight, triTop, triBottom };
             dc.DrawPolygon(3, triVertices);
 
@@ -184,7 +194,7 @@ public:
             dc.DrawCircle(outputPin, 4);
             dc.SetBrush(*wxWHITE_BRUSH);
 
-            dc.DrawLine(posX + 30, posY - 20, posX - 30, posY + 20);
+            dc.DrawLine(posX + 20, posY - 25, posX - 20, posY + 25);
 
             // 设置XOR门标签字体（放大）
             wxFont labelFont = originalFont;
@@ -229,7 +239,7 @@ public:
             labelFont.SetPointSize(14);
             dc.SetFont(labelFont);
             dc.SetTextForeground(*wxBLACK);
-            dc.DrawText("NAND", posX - 47, posY - 14);
+            dc.DrawText("NAND", posX - 38, posY - 14);
             break;
         }
         case TYPE_NOR: {
@@ -315,7 +325,6 @@ public:
         dc.SetFont(originalFont);
     }
 
-    // 以下Update、GetPins、GetBoundingBox等方法保持不变（与之前提供的代码一致）
     virtual void Update() override {
         if (inputs.empty() || outputs.empty()) return;
         bool result = false;
@@ -339,29 +348,55 @@ public:
     }
 
     virtual wxRect GetBoundingBox() const override { return wxRect(posX - 50, posY - 40, 100, 80); }
+
     virtual wxString GetName() const override {
         switch (type) {
         case TYPE_AND: return "AND"; case TYPE_OR: return "OR"; case TYPE_NOT: return "NOT";
         case TYPE_XOR: return "XOR"; case TYPE_NAND: return "NAND"; case TYPE_NOR: return "NOR";
-        default: return "UnknownGate";
+        default: return "Unknown";
         }
     }
     virtual wxString GetDisplayName() const override { return GetName() + " Gate"; }
-    virtual void Serialize(wxString& data) const override { data += wxString::Format("%d,%d,%d", type, posX, posY); }
+
+    // 序列化方法：将对象状态转换为字符串
+    virtual void Serialize(wxString& data) const override {
+        // 将类型、X坐标、Y坐标格式化为逗号分隔的字符串并追加到data中
+        data += wxString::Format("%d,%d,%d", type, posX, posY);
+    }
+
+    // 反序列化方法：从字符串恢复对象状态
     virtual void Deserialize(const wxString& data) override {
+        // 使用逗号作为分隔符解析字符串
         wxStringTokenizer tokenizer(data, ",");
+
+        // 检查是否有足够的分隔符（至少3个：类型、X、Y）
         if (tokenizer.CountTokens() >= 3) {
-            long typeVal, x, y;
-            if (tokenizer.GetNextToken().ToLong(&typeVal) && tokenizer.GetNextToken().ToLong(&x) && tokenizer.GetNextToken().ToLong(&y)) {
+            long typeVal, x, y;  // 用于存储转换后的数值
+
+            // 依次解析类型、X坐标、Y坐标
+            if (tokenizer.GetNextToken().ToLong(&typeVal) &&
+                tokenizer.GetNextToken().ToLong(&x) &&
+                tokenizer.GetNextToken().ToLong(&y)) {
+
+                // 恢复元素类型
                 type = static_cast<ElementType>(typeVal);
+                // 设置元素位置
                 SetPosition(static_cast<int>(x), static_cast<int>(y));
-                const int PIN_OFFSET = 40;
-                inputs.clear(); outputs.clear();
+
+                const int PIN_OFFSET = 40;  // 引脚偏移量
+
+                // 清空现有的输入输出引脚
+                inputs.clear();
+                outputs.clear();
+
+                // 根据门类型重新创建引脚
                 if (type == TYPE_NOT) {
+                    // NOT门：1个输入（左侧），1个输出（右侧）
                     inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y, true, this));
                     outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
                 }
                 else {
+                    // 其他门（AND、OR、XOR等）：2个输入（左上下），1个输出（右侧）
                     inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y - 20, true, this));
                     inputs.push_back(std::make_unique<Pin>(x - PIN_OFFSET, y + 20, true, this));
                     outputs.push_back(std::make_unique<Pin>(x + PIN_OFFSET, y, false, this));
@@ -369,24 +404,41 @@ public:
             }
         }
     }
+    // 获取属性：将对象的属性添加到属性网格中显示
     virtual void GetProperties(wxPropertyGrid* pg) const override {
+        // 添加类型属性（只读）
         pg->Append(new wxStringProperty("Type", "Type", GetDisplayName()));
+        // 添加X坐标属性（可编辑）
         pg->Append(new wxIntProperty("X Position", "X", posX));
+        // 添加Y坐标属性（可编辑）
         pg->Append(new wxIntProperty("Y Position", "Y", posY));
     }
+
+    // 设置属性：从属性网格更新对象属性
     virtual void SetProperties(wxPropertyGrid* pg) override {
+        // 从属性网格获取X和Y坐标的值
         wxVariant xVar = pg->GetPropertyValue("X");
         wxVariant yVar = pg->GetPropertyValue("Y");
+
+        // 检查值类型是否正确
         if (xVar.IsType("long") && yVar.IsType("long")) {
+            // 转换Variant类型为整数
             int newX = static_cast<int>(xVar.GetLong());
             int newY = static_cast<int>(yVar.GetLong());
+
+            // 设置逻辑门的新位置
             SetPosition(newX, newY);
-            const int PIN_OFFSET = 40;
+
+            const int PIN_OFFSET = 40;  // 引脚偏移量
+
+            // 根据门类型更新所有引脚的位置
             if (type == TYPE_NOT) {
+                // NOT门：1个输入（左侧），1个输出（右侧）
                 inputs[0]->SetPosition(newX - PIN_OFFSET, newY);
                 outputs[0]->SetPosition(newX + PIN_OFFSET, newY);
             }
             else {
+                // 其他门（AND、OR、XOR等）：2个输入（左上下），1个输出（右侧）
                 inputs[0]->SetPosition(newX - PIN_OFFSET, newY - 20);
                 inputs[1]->SetPosition(newX - PIN_OFFSET, newY + 20);
                 outputs[0]->SetPosition(newX + PIN_OFFSET, newY);
